@@ -61,6 +61,7 @@ export default function App() {
         onAdd={(parentId) => void store.addNode(parentId)}
         onRename={(id, title) => void store.renameNode(id, title)}
         onDelete={(id) => void store.deleteNode(id)}
+        onDeleteChildren={(id) => void store.deleteChildNodes(id)}
         onOpenSettings={() => store.setShowSettings(true)}
         onExport={() => void store.exportBackup()}
         classifyMode={store.classifyMode}

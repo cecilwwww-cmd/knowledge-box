@@ -164,7 +164,8 @@ export async function runOrganize(options: {
   "markdown": "详细内容，使用 Markdown"
 }
 要求：思维导图层次清晰；详细内容可独立阅读；引用原料时可用「来源N」标记。
-当前节点视为最小知识单元：不要建议或生成更下级子节点，不要输出 suggestedChildren。
+重要：当前节点是最小知识单元。题干拆解、小问、受力分析等只能写进「详细内容」和「思维导图」，
+严禁输出 suggestedChildren，严禁要求在目录树下再建子节点（目录往上归类，不往下拆）。
 公式必须用 KaTeX 兼容写法：行内 $E=IR$，独立公式用 $$...$$（不要用 [ ] 或 \\[ \\] 包公式）。`
 
   const userContent = await buildUserContent(

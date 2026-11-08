@@ -173,6 +173,37 @@ export function useKnowledgeStore() {
     [selectedId],
   )
 
+  /** 只删直接/全部子孙，保留当前节点本身（用于清掉误生成的下级目录） */
+  const deleteChildNodes = useCallback(
+    async (id: string) => {
+      const all = await db.nodes.toArray()
+      const kids = all.filter((n) => n.parentId === id)
+      if (!kids.length) return
+      const toDelete = kids.flatMap((k) => collectDescendants(all, k.id))
+      await db.transaction(
+        'rw',
+        db.nodes,
+        db.sources,
+        db.mindmaps,
+        db.details,
+        db.snapshots,
+        async () => {
+          await db.nodes.bulkDelete(toDelete)
+          for (const nid of toDelete) {
+            await db.sources.where('nodeId').equals(nid).delete()
+            await db.mindmaps.delete(nid)
+            await db.details.delete(nid)
+            await db.snapshots.where('nodeId').equals(nid).delete()
+          }
+        },
+      )
+      if (selectedId && toDelete.includes(selectedId)) {
+        setSelectedId(id)
+      }
+    },
+    [selectedId],
+  )
+
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       if (!selectedId) return
@@ -515,6 +546,7 @@ export function useKnowledgeStore() {
     addNode,
     renameNode,
     deleteNode,
+    deleteChildNodes,
     addFiles,
     removeSource,
     saveDetail,

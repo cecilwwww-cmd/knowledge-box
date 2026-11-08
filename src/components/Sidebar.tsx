@@ -38,6 +38,7 @@ interface Props {
   onAdd: (parentId: string | null) => void
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
+  onDeleteChildren: (id: string) => void
   onOpenSettings: () => void
   onExport: () => void
   classifyMode: boolean
@@ -313,6 +314,18 @@ export function Sidebar(props: Props) {
             打开详细内容
           </button>
           <div className="context-sep" />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              if (confirm(`删除「${menu.title}」下的全部子节点？当前节点会保留。`)) {
+                props.onDeleteChildren(menu.nodeId)
+              }
+              setMenu(null)
+            }}
+          >
+            删除全部子节点
+          </button>
           <button
             type="button"
             role="menuitem"
