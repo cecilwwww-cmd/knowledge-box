@@ -150,24 +150,31 @@ async function extractImageOcr(
   file: File,
   onProgress?: (message: string) => void,
 ): Promise<{ text: string; dataUrl: string }> {
-  onProgress?.(`压缩并 OCR 识别：${file.name}`)
+  onProgress?.(`准备图片：${file.name}`)
   const { dataUrl } = await downscaleForOcr(file)
-  onProgress?.(`下载 OCR 语言包并识别：${file.name}（首次较慢）`)
-  const worker = await createWorker('chi_sim+eng')
+  // OCR 仅作纯文本模型兜底；识图模型会直接看原图。失败不阻断入库。
   try {
-    const {
-      data: { text },
-    } = await worker.recognize(dataUrl)
-    const cleaned = text.replace(/\n{3,}/g, '\n\n').trim()
-    if (!cleaned) {
-      throw new Error('OCR 未识别出文字，请换更清晰的截图后重试')
+    onProgress?.(`本地 OCR 辅助识别：${file.name}（首次较慢，可忽略错字）`)
+    const worker = await createWorker('chi_sim+eng')
+    try {
+      const {
+        data: { text },
+      } = await worker.recognize(dataUrl)
+      const cleaned = text.replace(/\n{3,}/g, '\n\n').trim()
+      return {
+        dataUrl,
+        text: cleaned
+          ? `（本地 OCR 辅助，可能有错，示意图需识图模型看原图）\n${cleaned}`
+          : `（图片：${file.name}）本地 OCR 未识别出文字；请用识图模型发送原图整理。`,
+      }
+    } finally {
+      await worker.terminate()
     }
+  } catch {
     return {
       dataUrl,
-      text: `（来自图片 OCR：${file.name}）\n${cleaned}`,
+      text: `（图片：${file.name}）本地 OCR 跳过；请用识图模型发送原图整理。`,
     }
-  } finally {
-    await worker.terminate()
   }
 }
 

@@ -47,6 +47,8 @@ export interface AppSettings {
   apiBaseUrl: string
   apiKey: string
   modelName: string
+  /** 像对话框一样把原图发给模型（需多模态 / 识图模型） */
+  sendImages?: boolean
 }
 
 export interface OrganizePreview {

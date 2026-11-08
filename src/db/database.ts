@@ -101,6 +101,7 @@ export async function ensureSeedData() {
         apiBaseUrl: 'https://api.openai.com/v1',
         apiKey: '',
         modelName: 'gpt-4o-mini',
+        sendImages: true,
       })
     },
   )

@@ -46,6 +46,7 @@ export function useKnowledgeStore() {
       apiBaseUrl: 'https://api.openai.com/v1',
       apiKey: '',
       modelName: 'gpt-4o-mini',
+      sendImages: true,
     } satisfies AppSettings)
 
   const selected = useMemo(
@@ -231,17 +232,25 @@ export function useKnowledgeStore() {
       if (!currentSources.length) {
         throw new Error('当前节点还没有原料。请先拖入图片/PDF/Word/HTML，等「原料」页出现内容后再整理。')
       }
+      const hasVisionReady = currentSources.some(
+        (s) => s.kind === 'image' && !!s.dataUrl,
+      )
       const weak = currentSources.filter(
         (s) =>
+          !(s.kind === 'image' && s.dataUrl) &&
           /暂不解析|未提取到|未识别出/i.test(s.textContent) &&
           s.textContent.length < 80,
       )
-      if (weak.length === currentSources.length) {
+      if (!hasVisionReady && weak.length === currentSources.length) {
         throw new Error(
           '原料未能提取出有效正文（可能是旧数据）。请删掉原料后重新拖入文件再试。',
         )
       }
-      setStatus('正在调用模型整理…')
+      setStatus(
+        settings.sendImages !== false && hasVisionReady
+          ? '正在发送原图给识图模型…'
+          : '正在调用模型整理…',
+      )
       const result = await runOrganize({
         settings,
         nodeTitle: selected.title,

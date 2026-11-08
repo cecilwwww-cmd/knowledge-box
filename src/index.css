@@ -708,6 +708,39 @@ body.resizing * {
   padding: 10px 12px;
 }
 
+.checkbox-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  grid-template-columns: none;
+}
+
+.checkbox-field input {
+  margin-top: 3px;
+  width: auto;
+  padding: 0;
+}
+
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-chip {
+  border: 1px solid var(--line);
+  background: #f7faf6;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.preset-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .preview-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

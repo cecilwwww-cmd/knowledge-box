@@ -7,8 +7,41 @@ interface Props {
   onClose: () => void
 }
 
+const PRESETS: Array<{
+  label: string
+  apiBaseUrl: string
+  modelName: string
+  sendImages: boolean
+  note: string
+}> = [
+  {
+    label: 'OpenAI 识图',
+    apiBaseUrl: 'https://api.openai.com/v1',
+    modelName: 'gpt-4o-mini',
+    sendImages: true,
+    note: '能看图+示意图',
+  },
+  {
+    label: '通义千问 VL',
+    apiBaseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    modelName: 'qwen-vl-plus',
+    sendImages: true,
+    note: '国内常用识图',
+  },
+  {
+    label: 'DeepSeek 文本',
+    apiBaseUrl: 'https://api.deepseek.com/v1',
+    modelName: 'deepseek-chat',
+    sendImages: false,
+    note: '不能看图，只能靠 OCR',
+  },
+]
+
 export function SettingsModal({ settings, onSave, onClose }: Props) {
-  const [draft, setDraft] = useState(settings)
+  const [draft, setDraft] = useState<AppSettings>({
+    ...settings,
+    sendImages: settings.sendImages !== false,
+  })
 
   return (
     <div className="modal-backdrop">
@@ -16,12 +49,31 @@ export function SettingsModal({ settings, onSave, onClose }: Props) {
         <header>
           <h2>本地设置</h2>
           <p>
-            Key 只存在本机浏览器。图片会先本地 OCR 再发给模型；DeepSeek 填
-            <code> https://api.deepseek.com/v1 </code>+
-            <code> deepseek-chat </code>
-            即可。
+            Key 只存在本机。要像网页对话框那样理解示意图，必须用<strong>多模态识图模型</strong>
+            ，并打开「发送原图」。DeepSeek Chat 是纯文本，只能靠易错的 OCR。
           </p>
         </header>
+
+        <div className="preset-row">
+          {PRESETS.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              className="preset-chip"
+              title={p.note}
+              onClick={() =>
+                setDraft({
+                  ...draft,
+                  apiBaseUrl: p.apiBaseUrl,
+                  modelName: p.modelName,
+                  sendImages: p.sendImages,
+                })
+              }
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
 
         <label className="field">
           <span>API Base URL</span>
@@ -45,8 +97,17 @@ export function SettingsModal({ settings, onSave, onClose }: Props) {
           <input
             value={draft.modelName}
             onChange={(e) => setDraft({ ...draft, modelName: e.target.value })}
-            placeholder="gpt-4o-mini"
+            placeholder="gpt-4o-mini / qwen-vl-plus"
           />
+        </label>
+
+        <label className="field checkbox-field">
+          <input
+            type="checkbox"
+            checked={draft.sendImages !== false}
+            onChange={(e) => setDraft({ ...draft, sendImages: e.target.checked })}
+          />
+          <span>发送原图给模型（识图 / 理解示意图，需多模态模型）</span>
         </label>
 
         <footer>
@@ -57,7 +118,7 @@ export function SettingsModal({ settings, onSave, onClose }: Props) {
             type="button"
             className="primary"
             onClick={() => {
-              onSave(draft)
+              onSave({ ...draft, sendImages: draft.sendImages !== false })
               onClose()
             }}
           >

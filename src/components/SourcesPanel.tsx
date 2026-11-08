@@ -10,7 +10,7 @@ const kindLabel: Record<string, string> = {
   html: 'HTML',
   pdf: 'PDF',
   word: 'Word',
-  image: '图片OCR',
+  image: '图片（原图+OCR）',
   unknown: '其他',
 }
 
@@ -18,7 +18,8 @@ export function SourcesPanel({ sources, onRemove }: Props) {
   if (!sources.length) {
     return (
       <div className="empty-panel">
-        还没有原料。支持拖入：文本 / HTML / PDF / Word(.docx) / 图片（本地 OCR）。
+        还没有原料。支持拖入：文本 / HTML / PDF / Word(.docx) /
+        图片（原图发给识图模型；OCR 仅作兜底）。
       </div>
     )
   }
