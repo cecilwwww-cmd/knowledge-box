@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { DetailEditor } from './components/DetailEditor'
-import { MindmapEditor } from './components/MindmapEditor'
+import { MindmapWorkspace } from './components/MindmapWorkspace'
 import { OrganizeBar } from './components/OrganizeBar'
 import { PreviewModal } from './components/PreviewModal'
 import { readSidebarWidth, ResizeHandle } from './components/ResizeHandle'
@@ -166,9 +166,10 @@ export default function App() {
               onRemove={(id) => void store.removeSource(id)}
             />
           ) : store.activeTab === 'mindmap' ? (
-            <MindmapEditor
-              key={store.selected.id}
+            <MindmapWorkspace
+              nodeId={store.selected.id}
               data={store.mindmap?.data}
+              sources={store.sources}
               onChange={(data) => void store.saveMindmap(data)}
             />
           ) : (

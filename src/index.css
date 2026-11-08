@@ -860,6 +860,80 @@ body.resizing * {
   box-shadow: none;
 }
 
+.mind-workspace {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  gap: 8px;
+}
+
+.mind-source-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 0 2px;
+}
+
+.mind-source-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.mind-source-chip {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--accent);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mind-source-chip:hover,
+.mind-source-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.mind-source-chip.ghost {
+  color: var(--muted);
+}
+
+.mind-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.mind-split.is-split {
+  grid-template-columns: 1fr 1fr;
+}
+
+.mind-split.is-split.is-swapped .pane-mind {
+  order: 2;
+}
+
+.mind-split.is-split.is-swapped .pane-source {
+  order: 1;
+}
+
+.mind-split-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .mindmap-host {
   flex: 1;
   min-height: 0;
@@ -868,6 +942,73 @@ body.resizing * {
   border-radius: 12px;
   overflow: hidden;
   background: #f7f8fa;
+}
+
+.source-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.source-preview > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  background: #f7faf6;
+  font-size: 13px;
+}
+
+.source-preview > header a {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.source-preview-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px;
+}
+
+.source-preview-body img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.source-preview-body iframe {
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  border: none;
+}
+
+.source-preview-body pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .mind-split.is-split {
+    grid-template-columns: 1fr;
+  }
+
+  .mind-split.is-split.is-swapped .pane-mind,
+  .mind-split.is-split.is-swapped .pane-source {
+    order: unset;
+  }
 }
 
 /* 教材逻辑图式：根粗框、一级描边盒、深层下划线文本 */
@@ -926,6 +1067,15 @@ body.resizing * {
 .textbook-mindmap me-tpc .katex-display {
   margin: 0.15em 0;
   overflow: visible;
+}
+
+/* 避免选中态 / 空公式撑出大红框感的异常外轮廓 */
+.textbook-mindmap me-tpc.selected {
+  outline-offset: 2px;
+}
+
+.textbook-mindmap me-tpc .katex-display > .katex {
+  white-space: normal;
 }
 
 .modal-backdrop {

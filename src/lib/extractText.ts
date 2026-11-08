@@ -195,12 +195,20 @@ export async function extractFromFile(
 
   if (isPdf(file)) {
     onProgress?.(`解析 PDF：${file.name}`)
-    return { kind: 'pdf', textContent: await extractPdf(file) }
+    const [textContent, dataUrl] = await Promise.all([
+      extractPdf(file),
+      fileToDataUrl(file),
+    ])
+    return { kind: 'pdf', textContent, dataUrl }
   }
 
   if (isWord(file)) {
     onProgress?.(`解析 Word：${file.name}`)
-    return { kind: 'word', textContent: await extractWord(file) }
+    const [textContent, dataUrl] = await Promise.all([
+      extractWord(file),
+      fileToDataUrl(file),
+    ])
+    return { kind: 'word', textContent, dataUrl }
   }
 
   if (isImage(file)) {
