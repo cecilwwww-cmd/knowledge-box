@@ -162,20 +162,8 @@ body.resizing * {
 .breadcrumb-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  min-height: 32px;
-}
-
-.breadcrumb-row .breadcrumb {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.breadcrumb-row .organize-toggle {
-  flex: 0 0 auto;
 }
 
 .organize-toggle {
@@ -516,24 +504,10 @@ body.resizing * {
 
 .organize-bar {
   display: grid;
-  grid-template-columns: auto minmax(140px, 180px) 1fr auto;
+  grid-template-columns: 180px 1fr auto;
   gap: 10px;
-  align-items: center;
-  padding: 10px 16px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--line);
-}
-
-.organize-tabs {
-  padding: 0;
-  border: none;
-  flex-wrap: wrap;
-}
-
-.header-tabs {
-  margin-left: auto;
-  margin-right: 8px;
-  padding: 0;
-  border: none;
 }
 
 .drop-zone {
@@ -583,23 +557,10 @@ body.resizing * {
   border-bottom: 1px solid var(--line);
 }
 
-.tabs.header-tabs,
-.tabs.organize-tabs {
-  border-bottom: none;
-  padding: 0;
-}
-
 .tabs button.active {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
-}
-
-.header-tabs button,
-.organize-tabs button {
-  padding: 6px 10px;
-  font-size: 13px;
-  white-space: nowrap;
 }
 
 .workspace-body {
