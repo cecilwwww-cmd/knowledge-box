@@ -4,7 +4,7 @@ import type { OrganizePreview } from '../db/types'
 interface Props {
   preview: OrganizePreview
   mode?: 'organize' | 'rollup'
-  parentTitle?: string
+  nodeTitle?: string
   onCancel: () => void
   onApply: (opts: { mindmap: boolean; detail: boolean; title?: string }) => void
 }
@@ -12,14 +12,14 @@ interface Props {
 export function PreviewModal({
   preview,
   mode = 'organize',
-  parentTitle,
+  nodeTitle,
   onCancel,
   onApply,
 }: Props) {
   const [mindmap, setMindmap] = useState(true)
   const [detail, setDetail] = useState(true)
   const [title, setTitle] = useState(
-    parentTitle || preview.mindmap.topic || '',
+    nodeTitle || preview.title || preview.mindmap.topic || '',
   )
   const isRollup = mode === 'rollup'
 
@@ -31,20 +31,18 @@ export function PreviewModal({
           <p>
             {isRollup
               ? '将创建上级节点并把勾选节点收拢为其子节点。详情为概况，导图为大块总览；标题可再改。'
-              : '确认后再写入。写入前会自动保存当前版本快照。'}
+              : '确认后写入导图/详情，并同步左侧目录标题。'}
           </p>
         </header>
 
-        {isRollup ? (
-          <label className="field">
-            <span>上级标题</span>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="上级节点标题"
-            />
-          </label>
-        ) : null}
+        <label className="field">
+          <span>{isRollup ? '上级标题' : '节点标题'}</span>
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={isRollup ? '上级节点标题' : '本条知识标题'}
+          />
+        </label>
 
         <div className="preview-grid">
           <section>
@@ -83,12 +81,12 @@ export function PreviewModal({
           <button
             type="button"
             className="primary"
-            disabled={(!mindmap && !detail) || (isRollup && !title.trim())}
+            disabled={(!mindmap && !detail) || !title.trim()}
             onClick={() =>
               onApply({
                 mindmap,
                 detail,
-                title: isRollup ? title.trim() : undefined,
+                title: title.trim(),
               })
             }
           >

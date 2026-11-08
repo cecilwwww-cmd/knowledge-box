@@ -33,7 +33,8 @@ export function useKnowledgeStore() {
     preview: OrganizePreview
     mindElixirData: unknown
     prompt: string
-    rollupTitle?: string
+    /** 叶子整理或上级归类的目录标题 */
+    nodeTitle?: string
     childIds?: string[]
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -276,57 +277,76 @@ export function useKnowledgeStore() {
     await db.settings.put(next)
   }, [])
 
-  const startOrganize = useCallback(async () => {
-    if (!selected) return
-    if (parsing) {
-      setError('文件还在解析中，请稍后再点「开始整理」')
-      return
-    }
-    setOrganizing(true)
-    setError(null)
-    try {
-      const currentSources = await db.sources
-        .where('nodeId')
-        .equals(selected.id)
-        .toArray()
-      if (!currentSources.length) {
-        throw new Error('当前节点还没有原料。请先拖入图片/PDF/Word/HTML，等「原料」页出现内容后再整理。')
+  const startOrganize = useCallback(
+    async (opts?: { titleMode?: 'ai' | 'manual'; manualTitle?: string }) => {
+      if (!selected) return
+      if (parsing) {
+        setError('文件还在解析中，请稍后再点「开始整理」')
+        return
       }
-      const hasVisionReady = currentSources.some(
-        (s) => s.kind === 'image' && !!s.dataUrl,
-      )
-      const weak = currentSources.filter(
-        (s) =>
-          !(s.kind === 'image' && s.dataUrl) &&
-          /暂不解析|未提取到|未识别出/i.test(s.textContent) &&
-          s.textContent.length < 80,
-      )
-      if (!hasVisionReady && weak.length === currentSources.length) {
-        throw new Error(
-          '原料未能提取出有效正文（可能是旧数据）。请删掉原料后重新拖入文件再试。',
+      const titleMode = opts?.titleMode ?? 'ai'
+      const manualTitle = opts?.manualTitle?.trim()
+      if (titleMode === 'manual' && !manualTitle) {
+        setError('请先填写标题，或改选「AI 总结标题」')
+        return
+      }
+      setOrganizing(true)
+      setError(null)
+      try {
+        const currentSources = await db.sources
+          .where('nodeId')
+          .equals(selected.id)
+          .toArray()
+        if (!currentSources.length) {
+          throw new Error(
+            '当前节点还没有原料。请先拖入图片/PDF/Word/HTML，等「原料」页出现内容后再整理。',
+          )
+        }
+        const hasVisionReady = currentSources.some(
+          (s) => s.kind === 'image' && !!s.dataUrl,
         )
+        const weak = currentSources.filter(
+          (s) =>
+            !(s.kind === 'image' && s.dataUrl) &&
+            /暂不解析|未提取到|未识别出/i.test(s.textContent) &&
+            s.textContent.length < 80,
+        )
+        if (!hasVisionReady && weak.length === currentSources.length) {
+          throw new Error(
+            '原料未能提取出有效正文（可能是旧数据）。请删掉原料后重新拖入文件再试。',
+          )
+        }
+        setStatus(
+          titleMode === 'manual'
+            ? `正在按标题「${manualTitle}」整理…`
+            : settings.sendImages !== false && hasVisionReady
+              ? '正在识图并总结标题…'
+              : '正在总结标题并整理…',
+        )
+        const result = await runOrganize({
+          settings,
+          nodeTitle: selected.title,
+          prompt,
+          sources: currentSources,
+          existingMarkdown: detail?.markdown,
+          fixedTitle: titleMode === 'manual' ? manualTitle : undefined,
+        })
+        setPreview({
+          mode: 'organize',
+          ...result,
+          prompt,
+          nodeTitle: result.preview.title || manualTitle || selected.title,
+        })
+        setStatus(null)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+        setStatus(null)
+      } finally {
+        setOrganizing(false)
       }
-      setStatus(
-        settings.sendImages !== false && hasVisionReady
-          ? '正在发送原图给识图模型…'
-          : '正在调用模型整理…',
-      )
-      const result = await runOrganize({
-        settings,
-        nodeTitle: selected.title,
-        prompt,
-        sources: currentSources,
-        existingMarkdown: detail?.markdown,
-      })
-      setPreview({ mode: 'organize', ...result, prompt })
-      setStatus(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-      setStatus(null)
-    } finally {
-      setOrganizing(false)
-    }
-  }, [selected, settings, prompt, detail?.markdown, parsing])
+    },
+    [selected, settings, prompt, detail?.markdown, parsing],
+  )
 
   const toggleClassifyMode = useCallback(() => {
     setClassifyMode((v) => {
@@ -389,7 +409,7 @@ export function useKnowledgeStore() {
           preview: result.preview,
           mindElixirData: result.mindElixirData,
           prompt,
-          rollupTitle: result.title,
+          nodeTitle: result.title,
           childIds: children.map((c) => c.id),
         })
         setStatus(null)
@@ -416,7 +436,7 @@ export function useKnowledgeStore() {
         const siblings = all.filter((n) => n.parentId === parentOfGroup)
         const title = (
           opts.title?.trim() ||
-          preview.rollupTitle ||
+          preview.nodeTitle ||
           preview.preview.mindmap.topic
         ).trim()
         const parentId = crypto.randomUUID()
@@ -481,6 +501,12 @@ export function useKnowledgeStore() {
       }
 
       if (!selected) return
+      const title = (
+        opts.title?.trim() ||
+        preview.nodeTitle ||
+        preview.preview.title ||
+        selected.title
+      ).trim()
       await db.snapshots.add({
         id: crypto.randomUUID(),
         nodeId: selected.id,
@@ -493,7 +519,7 @@ export function useKnowledgeStore() {
       if (opts.mindmap) {
         await db.mindmaps.put({
           nodeId: selected.id,
-          data: preview.mindElixirData,
+          data: patchMindElixirTopic(preview.mindElixirData, title),
           updatedAt: now,
         })
       }
@@ -504,7 +530,7 @@ export function useKnowledgeStore() {
           updatedAt: now,
         })
       }
-      await db.nodes.update(selected.id, { updatedAt: now })
+      await db.nodes.update(selected.id, { title, updatedAt: now })
       setPreview(null)
       setActiveTab(opts.detail ? 'detail' : 'mindmap')
     },

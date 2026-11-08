@@ -54,6 +54,8 @@ export interface AppSettings {
 export interface OrganizePreview {
   mindmap: MindmapTreeNode
   markdown: string
+  /** 目录树节点标题（叶子整理或上级归类） */
+  title?: string
 }
 
 export interface MindmapTreeNode {

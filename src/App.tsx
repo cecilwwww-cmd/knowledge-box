@@ -109,7 +109,7 @@ export default function App() {
               prompt={store.prompt}
               onPromptChange={store.setPrompt}
               onFiles={(files) => void store.addFiles(files)}
-              onOrganize={() => void store.startOrganize()}
+              onOrganize={(opts) => void store.startOrganize(opts)}
               organizing={store.organizing || store.parsing}
               disabled={!store.selected || store.parsing}
             />
@@ -180,7 +180,7 @@ export default function App() {
         <PreviewModal
           preview={store.preview.preview}
           mode={store.preview.mode}
-          parentTitle={store.preview.rollupTitle}
+          nodeTitle={store.preview.nodeTitle}
           onCancel={() => store.setPreview(null)}
           onApply={(opts) => void store.applyPreview(opts)}
         />

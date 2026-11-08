@@ -74,6 +74,7 @@ function buildTextPrompt(
   sources: SourceItem[],
   existingMarkdown: string | undefined,
   sendingImages: boolean,
+  fixedTitle?: string,
 ): string {
   const sourceBlock = sources
     .map((s, i) => {
@@ -89,7 +90,7 @@ function buildTextPrompt(
     .join('\n\n')
 
   return `当前节点标题：${nodeTitle}
-
+${fixedTitle ? `用户指定的目录标题：${fixedTitle}（JSON 的 title 与 mindmap.topic 必须用此标题）\n` : '标题模式：请根据原料总结一个简洁的目录标题（写入 JSON.title）。\n'}
 整理方向（汇总提示词）：
 ${prompt || '自动归纳要点，生成清晰导图与详细说明。'}
 
@@ -105,6 +106,7 @@ async function buildUserContent(
   sources: SourceItem[],
   existingMarkdown: string | undefined,
   sendImages: boolean,
+  fixedTitle?: string,
 ): Promise<ChatContent> {
   const imageSources = sources.filter((s) => s.kind === 'image' && s.dataUrl).slice(0, 4)
   const sendingImages = sendImages && imageSources.length > 0
@@ -114,6 +116,7 @@ async function buildUserContent(
     sources,
     existingMarkdown,
     sendingImages,
+    fixedTitle,
   )
 
   if (!sendingImages) return text
@@ -140,11 +143,18 @@ export async function runOrganize(options: {
   sources: SourceItem[]
   existingMarkdown?: string
   existingMindmapSummary?: string
+  /** 用户自命名；不传则由模型总结 title */
+  fixedTitle?: string
 }): Promise<{ preview: OrganizePreview; mindElixirData: unknown }> {
-  const { settings, nodeTitle, prompt, sources } = options
+  const { settings, nodeTitle, prompt, sources, fixedTitle } = options
 
   if (!settings.apiKey.trim()) {
     throw new Error('请先在设置里填写 API Key（或由管理员在部署环境变量里配置）')
+  }
+
+  const manualTitle = fixedTitle?.trim()
+  if (fixedTitle !== undefined && !manualTitle) {
+    throw new Error('请填写节点标题')
   }
 
   const sendImages = settings.sendImages !== false
@@ -160,12 +170,14 @@ export async function runOrganize(options: {
 若消息中附带图片，必须像网页聊天识图一样直接理解图中的文字、公式、坐标系与抽象示意图（如受力、磁场、导轨等），不要声称无法看图；本地 OCR 文本常有错误，以图片为准。
 必须只输出一个 JSON 对象，不要解释，格式如下：
 {
+  "title": "简洁目录标题（像笔记名，勿过长）",
   "mindmap": { "topic": "中心主题", "children": [ { "topic": "...", "children": [], "note": "可选短注" } ] },
   "markdown": "详细内容，使用 Markdown"
 }
 要求：思维导图层次清晰；详细内容可独立阅读；引用原料时可用「来源N」标记。
 重要：当前节点是最小知识单元。题干拆解、小问、受力分析等只能写进「详细内容」和「思维导图」，
 严禁输出 suggestedChildren，严禁要求在目录树下再建子节点（目录往上归类，不往下拆）。
+${manualTitle ? `用户已指定目录标题「${manualTitle}」：title 与 mindmap.topic 必须使用该标题。` : '请根据原料总结 title（目录名），mindmap.topic 可与 title 一致或略完整。'}
 公式必须用 KaTeX 兼容写法：行内 $E=IR$，独立公式用 $$...$$（不要用 [ ] 或 \\[ \\] 包公式）。`
 
   const userContent = await buildUserContent(
@@ -174,6 +186,7 @@ export async function runOrganize(options: {
     sources,
     options.existingMarkdown,
     sendImages,
+    manualTitle,
   )
 
   const base = settings.apiBaseUrl.replace(/\/$/, '')
@@ -211,32 +224,45 @@ export async function runOrganize(options: {
   }
 
   const data = await res.json()
-  return parseOrganizeResponse(data)
+  return parseOrganizeResponse(data, manualTitle)
 }
 
-function parseOrganizeResponse(data: {
-  choices?: Array<{
-    message?: { content?: string; reasoning_content?: string }
-  }>
-}): { preview: OrganizePreview; mindElixirData: unknown } {
+function parseOrganizeResponse(
+  data: {
+    choices?: Array<{
+      message?: { content?: string; reasoning_content?: string }
+    }>
+  },
+  fixedTitle?: string,
+): { preview: OrganizePreview; mindElixirData: unknown } {
   const message = data.choices?.[0]?.message
   const content = message?.content?.trim() || message?.reasoning_content?.trim()
   if (!content) throw new Error('模型没有返回内容')
 
   const parsed = extractJson(content) as {
+    title?: string
     mindmap?: MindmapTreeNode
     markdown?: string
   }
 
-  if (!parsed.mindmap?.topic) {
-    throw new Error('返回 JSON 缺少 mindmap.topic')
+  if (!parsed.mindmap?.topic && !parsed.title && !fixedTitle) {
+    throw new Error('返回 JSON 缺少 mindmap.topic / title')
   }
 
+  const title = (
+    fixedTitle ||
+    parsed.title ||
+    parsed.mindmap?.topic ||
+    '未命名'
+  ).trim()
+  const mindmap: MindmapTreeNode = parsed.mindmap
+    ? { ...parsed.mindmap, topic: title }
+    : { topic: title, children: [] }
+
   const preview: OrganizePreview = {
-    mindmap: parsed.mindmap,
-    markdown: normalizeMathMarkdown(
-      parsed.markdown || `# ${parsed.mindmap.topic}\n`,
-    ),
+    title,
+    mindmap,
+    markdown: normalizeMathMarkdown(parsed.markdown || `# ${title}\n`),
   }
 
   return {
