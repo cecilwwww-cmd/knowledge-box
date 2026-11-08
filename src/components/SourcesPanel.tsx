@@ -5,11 +5,20 @@ interface Props {
   onRemove: (id: string) => void
 }
 
+const kindLabel: Record<string, string> = {
+  text: '文本',
+  html: 'HTML',
+  pdf: 'PDF',
+  word: 'Word',
+  image: '图片OCR',
+  unknown: '其他',
+}
+
 export function SourcesPanel({ sources, onRemove }: Props) {
   if (!sources.length) {
     return (
       <div className="empty-panel">
-        还没有原料。把文件拖到上方「拖入图文」区域，或点击该区域选择文件。
+        还没有原料。支持拖入：文本 / HTML / PDF / Word(.docx) / 图片（本地 OCR）。
       </div>
     )
   }
@@ -19,12 +28,23 @@ export function SourcesPanel({ sources, onRemove }: Props) {
       {sources.map((s) => (
         <article key={s.id} className="source-card">
           <header>
-            <strong>{s.name}</strong>
+            <strong>
+              {s.name}
+              {s.kind ? (
+                <span className="source-kind"> · {kindLabel[s.kind] || s.kind}</span>
+              ) : null}
+            </strong>
             <button type="button" onClick={() => onRemove(s.id)}>
               移除
             </button>
           </header>
-          <pre>{s.textContent.slice(0, 1200)}{s.textContent.length > 1200 ? '…' : ''}</pre>
+          {s.dataUrl ? (
+            <img className="source-thumb" src={s.dataUrl} alt={s.name} />
+          ) : null}
+          <pre>
+            {s.textContent.slice(0, 1200)}
+            {s.textContent.length > 1200 ? '…' : ''}
+          </pre>
         </article>
       ))}
     </div>

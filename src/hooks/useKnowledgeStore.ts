@@ -7,7 +7,7 @@ import type {
   OrganizePreview,
   SourceItem,
 } from '../db/types'
-import { extractTextFromFile } from '../lib/extractText'
+import { extractFromFile } from '../lib/extractText'
 import { runOrganize } from '../lib/organize'
 
 export function useKnowledgeStore() {
@@ -18,6 +18,8 @@ export function useKnowledgeStore() {
   )
   const [prompt, setPrompt] = useState('')
   const [organizing, setOrganizing] = useState(false)
+  const [parsing, setParsing] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
   const [preview, setPreview] = useState<{
     preview: OrganizePreview
     mindElixirData: unknown
@@ -145,19 +147,39 @@ export function useKnowledgeStore() {
     async (files: FileList | File[]) => {
       if (!selectedId) return
       const list = Array.from(files)
-      for (const file of list) {
-        const textContent = await extractTextFromFile(file)
-        await db.sources.add({
-          id: crypto.randomUUID(),
-          nodeId: selectedId,
-          name: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          textContent,
-          size: file.size,
-          createdAt: Date.now(),
-        })
-      }
+      setError(null)
+      setParsing(true)
       setActiveTab('sources')
+      try {
+        for (const file of list) {
+          try {
+            setStatus(`正在解析：${file.name}…`)
+            const extracted = await extractFromFile(file, (msg) => setStatus(msg))
+            await db.sources.add({
+              id: crypto.randomUUID(),
+              nodeId: selectedId,
+              name: file.name,
+              mimeType: file.type || 'application/octet-stream',
+              textContent: extracted.textContent,
+              dataUrl: extracted.dataUrl,
+              kind: extracted.kind,
+              size: file.size,
+              createdAt: Date.now(),
+            })
+            setStatus(`已加入原料：${file.name}（${extracted.kind}）`)
+          } catch (e) {
+            setError(
+              e instanceof Error
+                ? `解析「${file.name}」失败：${e.message}`
+                : `解析「${file.name}」失败`,
+            )
+            setStatus(null)
+          }
+        }
+      } finally {
+        setParsing(false)
+        window.setTimeout(() => setStatus(null), 2500)
+      }
     },
     [selectedId],
   )
@@ -195,6 +217,10 @@ export function useKnowledgeStore() {
 
   const startOrganize = useCallback(async () => {
     if (!selected) return
+    if (parsing) {
+      setError('文件还在解析中，请稍后再点「开始整理」')
+      return
+    }
     setOrganizing(true)
     setError(null)
     try {
@@ -202,6 +228,20 @@ export function useKnowledgeStore() {
         .where('nodeId')
         .equals(selected.id)
         .toArray()
+      if (!currentSources.length) {
+        throw new Error('当前节点还没有原料。请先拖入图片/PDF/Word/HTML，等「原料」页出现内容后再整理。')
+      }
+      const weak = currentSources.filter(
+        (s) =>
+          /暂不解析|未提取到|未识别出/i.test(s.textContent) &&
+          s.textContent.length < 80,
+      )
+      if (weak.length === currentSources.length) {
+        throw new Error(
+          '原料未能提取出有效正文（可能是旧数据）。请删掉原料后重新拖入文件再试。',
+        )
+      }
+      setStatus('正在调用模型整理…')
       const result = await runOrganize({
         settings,
         nodeTitle: selected.title,
@@ -210,12 +250,14 @@ export function useKnowledgeStore() {
         existingMarkdown: detail?.markdown,
       })
       setPreview({ ...result, prompt })
+      setStatus(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+      setStatus(null)
     } finally {
       setOrganizing(false)
     }
-  }, [selected, settings, prompt, detail?.markdown])
+  }, [selected, settings, prompt, detail?.markdown, parsing])
 
   const applyPreview = useCallback(
     async (opts: { mindmap: boolean; detail: boolean; children: boolean }) => {
@@ -293,6 +335,8 @@ export function useKnowledgeStore() {
     prompt,
     setPrompt,
     organizing,
+    parsing,
+    status,
     preview,
     setPreview,
     showSettings,

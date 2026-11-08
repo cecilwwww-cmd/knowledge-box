@@ -1,5 +1,33 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import type { TreeNode } from '../hooks/useKnowledgeStore'
+
+/** 菜单相对标题可见文字末尾的间距 */
+const HOVER_MENU_GAP = 8
+
+let measureCanvas: HTMLCanvasElement | null = null
+
+function measureTextWidth(el: HTMLElement, text: string) {
+  const style = window.getComputedStyle(el)
+  if (!measureCanvas) measureCanvas = document.createElement('canvas')
+  const ctx = measureCanvas.getContext('2d')
+  if (!ctx) return 0
+  ctx.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+  return ctx.measureText(text).width
+}
+
+/** 标题按钮很宽时，菜单应贴在「最后一个可见字 / 省略号」右侧，而不是贴在按钮右边缘 */
+function getTitleVisualRight(titleEl: HTMLElement) {
+  const rect = titleEl.getBoundingClientRect()
+  const style = window.getComputedStyle(titleEl)
+  const padL = Number.parseFloat(style.paddingLeft) || 0
+  const padR = Number.parseFloat(style.paddingRight) || 0
+  const text = (titleEl.textContent || '').trim()
+  const available = Math.max(0, titleEl.clientWidth - padL - padR)
+  const textWidth = measureTextWidth(titleEl, text)
+  const visibleWidth = Math.min(textWidth, available)
+  return rect.left + padL + visibleWidth
+}
 
 interface Props {
   collapsed?: boolean
@@ -21,10 +49,22 @@ interface ContextMenuState {
   y: number
 }
 
+interface HoverFlyoutState {
+  nodeId: string
+  title: string
+  top: number
+  left: number
+}
+
 export function Sidebar(props: Props) {
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [flyout, setFlyout] = useState<HoverFlyoutState | null>(null)
+  const [flyoutVisible, setFlyoutVisible] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const flyoutRef = useRef<HTMLDivElement>(null)
+  const leaveTimer = useRef<number | null>(null)
+  const hideTimer = useRef<number | null>(null)
 
   useEffect(() => {
     if (!menu) return
@@ -50,10 +90,49 @@ export function Sidebar(props: Props) {
     }
   }, [menu])
 
+  useEffect(
+    () => () => {
+      if (leaveTimer.current) window.clearTimeout(leaveTimer.current)
+      if (hideTimer.current) window.clearTimeout(hideTimer.current)
+    },
+    [],
+  )
+
+  const clearLeaveTimer = () => {
+    if (leaveTimer.current) {
+      window.clearTimeout(leaveTimer.current)
+      leaveTimer.current = null
+    }
+  }
+
+  const showFlyout = (next: HoverFlyoutState) => {
+    clearLeaveTimer()
+    if (hideTimer.current) {
+      window.clearTimeout(hideTimer.current)
+      hideTimer.current = null
+    }
+    // 先关掉再打开，切换节点时也会重播入场动效
+    setFlyoutVisible(false)
+    setFlyout(next)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setFlyoutVisible(true))
+    })
+  }
+
+  const scheduleHideFlyout = () => {
+    clearLeaveTimer()
+    leaveTimer.current = window.setTimeout(() => {
+      setFlyoutVisible(false)
+      hideTimer.current = window.setTimeout(() => setFlyout(null), 200)
+    }, 80)
+  }
+
   const openMenu = (node: TreeNode, e: ReactMouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     props.onSelect(node.id)
+    setFlyout(null)
+    setFlyoutVisible(false)
 
     const pad = 8
     const approxW = 180
@@ -111,6 +190,7 @@ export function Sidebar(props: Props) {
             node={node}
             depth={0}
             selectedId={props.selectedId}
+            hoverId={flyout?.nodeId ?? null}
             renamingId={renamingId}
             setRenamingId={setRenamingId}
             onSelect={props.onSelect}
@@ -118,6 +198,13 @@ export function Sidebar(props: Props) {
             onRename={props.onRename}
             onDelete={props.onDelete}
             onContextMenu={openMenu}
+            onHoverRow={(payload) => {
+              if (!payload) {
+                scheduleHideFlyout()
+                return
+              }
+              showFlyout(payload)
+            }}
           />
         ))}
       </div>
@@ -199,6 +286,62 @@ export function Sidebar(props: Props) {
           </button>
         </div>
       ) : null}
+
+      {flyout && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              key={flyout.nodeId}
+              ref={flyoutRef}
+              className={`hover-menu ${flyoutVisible ? 'visible' : ''}`}
+              style={{ top: flyout.top, left: flyout.left }}
+              onMouseEnter={clearLeaveTimer}
+              onMouseLeave={scheduleHideFlyout}
+            >
+              <div className="hover-quick">
+                <button
+                  type="button"
+                  title="添加子节点"
+                  onClick={() => props.onAdd(flyout.nodeId)}
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  title="删除"
+                  onClick={() => {
+                    if (confirm(`删除「${flyout.title}」及其子节点？`)) {
+                      props.onDelete(flyout.nodeId)
+                    }
+                    setFlyout(null)
+                    setFlyoutVisible(false)
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              <div className="hover-brace-group">
+                <span className="hover-brace" aria-hidden="true">
+                  {'{'}
+                </span>
+                <div className="hover-brace-actions">
+                  <button
+                    type="button"
+                    onClick={() => props.onSelect(flyout.nodeId, 'mindmap')}
+                  >
+                    导图
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => props.onSelect(flyout.nodeId, 'detail')}
+                  >
+                    详情
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </aside>
   )
 }
@@ -207,6 +350,7 @@ function TreeItem({
   node,
   depth,
   selectedId,
+  hoverId,
   renamingId,
   setRenamingId,
   onSelect,
@@ -214,10 +358,12 @@ function TreeItem({
   onRename,
   onDelete,
   onContextMenu,
+  onHoverRow,
 }: {
   node: TreeNode
   depth: number
   selectedId: string | null
+  hoverId: string | null
   renamingId: string | null
   setRenamingId: (id: string | null) => void
   onSelect: (id: string, tab?: 'mindmap' | 'detail') => void
@@ -225,16 +371,36 @@ function TreeItem({
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
   onContextMenu: (node: TreeNode, e: ReactMouseEvent) => void
+  onHoverRow: (payload: HoverFlyoutState | null) => void
 }) {
   const [expanded, setExpanded] = useState(true)
-  const [hover, setHover] = useState(false)
   const [draft, setDraft] = useState(node.title)
+  const rowRef = useRef<HTMLDivElement>(null)
   const editing = renamingId === node.id
   const hasChildren = node.children.length > 0
+  const isHover = hoverId === node.id
 
   useEffect(() => {
     if (editing) setDraft(node.title)
   }, [editing, node.title])
+
+  const emitHover = () => {
+    const row = rowRef.current
+    if (!row || editing) return
+    const titleEl =
+      (row.querySelector('.tree-title') as HTMLElement | null) ||
+      (row.querySelector('.tree-rename') as HTMLElement | null)
+    const rowRect = row.getBoundingClientRect()
+    const left = titleEl
+      ? getTitleVisualRight(titleEl) + HOVER_MENU_GAP
+      : rowRect.right + HOVER_MENU_GAP
+    onHoverRow({
+      nodeId: node.id,
+      title: node.title,
+      top: rowRect.top + rowRect.height / 2,
+      left,
+    })
+  }
 
   const commitRename = () => {
     setRenamingId(null)
@@ -248,9 +414,10 @@ function TreeItem({
   return (
     <div className={`tree-item depth-${depth}`}>
       <div
-        className={`tree-row ${selectedId === node.id ? 'active' : ''} ${hover ? 'is-hover' : ''}`}
-        onMouseEnter={() => setHover(true)}
-        onMouseLeave={() => setHover(false)}
+        ref={rowRef}
+        className={`tree-row ${selectedId === node.id ? 'active' : ''} ${isHover ? 'is-hover' : ''}`}
+        onMouseEnter={emitHover}
+        onMouseLeave={() => onHoverRow(null)}
         onContextMenu={(e) => onContextMenu(node, e)}
       >
         {hasChildren ? (
@@ -291,38 +458,6 @@ function TreeItem({
             {node.title}
           </button>
         )}
-
-        {!editing && (
-          <div className={`hover-menu ${hover ? 'visible' : ''}`} aria-hidden={!hover}>
-            <div className="hover-quick">
-              <button type="button" title="添加子节点" onClick={() => onAdd(node.id)}>
-                +
-              </button>
-              <button
-                type="button"
-                title="删除"
-                onClick={() => {
-                  if (confirm(`删除「${node.title}」及其子节点？`)) onDelete(node.id)
-                }}
-              >
-                ×
-              </button>
-            </div>
-            <div className="hover-brace-group">
-              <span className="hover-brace" aria-hidden="true">
-                {'{'}
-              </span>
-              <div className="hover-brace-actions">
-                <button type="button" onClick={() => onSelect(node.id, 'mindmap')}>
-                  导图
-                </button>
-                <button type="button" onClick={() => onSelect(node.id, 'detail')}>
-                  详情
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {expanded && hasChildren ? (
@@ -333,6 +468,7 @@ function TreeItem({
               node={child}
               depth={depth + 1}
               selectedId={selectedId}
+              hoverId={hoverId}
               renamingId={renamingId}
               setRenamingId={setRenamingId}
               onSelect={onSelect}
@@ -340,6 +476,7 @@ function TreeItem({
               onRename={onRename}
               onDelete={onDelete}
               onContextMenu={onContextMenu}
+              onHoverRow={onHoverRow}
             />
           ))}
         </div>

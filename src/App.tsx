@@ -92,6 +92,7 @@ export default function App() {
               </button>
             </div>
           ) : null}
+          {store.status ? <div className="status-banner">{store.status}</div> : null}
         </header>
 
         {!organizeCollapsed ? (
@@ -100,8 +101,8 @@ export default function App() {
             onPromptChange={store.setPrompt}
             onFiles={(files) => void store.addFiles(files)}
             onOrganize={() => void store.startOrganize()}
-            organizing={store.organizing}
-            disabled={!store.selected}
+            organizing={store.organizing || store.parsing}
+            disabled={!store.selected || store.parsing}
           />
         ) : null}
 

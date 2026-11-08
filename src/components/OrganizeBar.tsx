@@ -29,12 +29,13 @@ export function OrganizeBar(props: Props) {
         }}
         onClick={() => inputRef.current?.click()}
       >
-        <span>拖入图文 / 点击选择</span>
+        <span>拖入图文/PDF/Word/HTML</span>
         <input
           ref={inputRef}
           type="file"
           multiple
           hidden
+          accept=".txt,.md,.html,.htm,.pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,.bmp,text/*,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={(e) => {
             if (e.target.files?.length) props.onFiles(e.target.files)
             e.target.value = ''

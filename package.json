@@ -12,9 +12,12 @@
   "dependencies": {
     "dexie": "^4.4.7",
     "dexie-react-hooks": "^4.4.0",
+    "mammoth": "^1.13.0",
     "mind-elixir": "^6.0.0-next.4",
+    "pdfjs-dist": "^6.5.438",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "tesseract.js": "^7.0.0",
     "uuid": "^14.0.3",
     "vditor": "^4.0.1"
   },

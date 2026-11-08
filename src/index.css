@@ -91,6 +91,7 @@ body.resizing * {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: visible;
 }
 
 .sidebar-header {
@@ -224,6 +225,7 @@ body.resizing * {
 
 .tree {
   overflow: auto;
+  overflow-x: visible;
   padding: 8px 8px 24px;
   flex: 1;
 }
@@ -239,7 +241,6 @@ body.resizing * {
 }
 
 .tree-row {
-  --hover-rail: 112px;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -249,17 +250,10 @@ body.resizing * {
   padding-left: 2px;
   padding-right: 8px;
   min-width: 0;
-  position: relative;
-  z-index: 1;
-  transition: padding-right 180ms ease;
 }
 
+.tree-row.active,
 .tree-row.is-hover {
-  padding-right: calc(var(--hover-rail) + 6px);
-  z-index: 6;
-}
-
-.tree-row.active {
   background: var(--accent-soft);
 }
 
@@ -306,28 +300,28 @@ body.resizing * {
 }
 
 .hover-menu {
-  position: absolute;
-  right: 4px;
-  top: 50%;
+  position: fixed;
+  z-index: 1200;
   display: flex;
   align-items: center;
   gap: 6px;
-  justify-content: flex-end;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  white-space: nowrap;
   opacity: 0;
-  transform: translate(8px, -50%);
+  transform: translate(-8px, -50%);
   pointer-events: none;
   transition:
-    opacity 200ms ease 140ms,
-    transform 220ms cubic-bezier(0.22, 1, 0.36, 1) 140ms;
+    opacity 180ms ease,
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .hover-menu.visible {
   opacity: 1;
   transform: translate(0, -50%);
   pointer-events: auto;
-  transition:
-    opacity 160ms ease 0ms,
-    transform 180ms cubic-bezier(0.22, 1, 0.36, 1) 0ms;
 }
 
 .hover-brace-group {
@@ -353,11 +347,10 @@ body.resizing * {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  padding: 3px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: rgba(251, 252, 249, 0.98);
-  box-shadow: var(--shadow);
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .hover-brace-actions button {
@@ -468,6 +461,16 @@ body.resizing * {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+}
+
+.status-banner {
+  margin-top: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid #b7d4c8;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
 }
 
 .organize-bar {
@@ -582,6 +585,23 @@ body.resizing * {
   padding: 8px 12px;
   border-bottom: 1px solid var(--line);
   background: #f7faf6;
+}
+
+.source-kind {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+.source-thumb {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  margin: 10px 12px 0;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #fff;
 }
 
 .source-card pre {
@@ -755,7 +775,4 @@ body.resizing * {
     grid-template-columns: 1fr;
   }
 
-  .tree-row.is-hover {
-    --hover-rail: 88px;
-  }
 }

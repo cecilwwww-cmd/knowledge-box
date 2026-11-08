@@ -15,7 +15,12 @@ export function SettingsModal({ settings, onSave, onClose }: Props) {
       <div className="modal">
         <header>
           <h2>本地设置</h2>
-          <p>Key 只存在本机浏览器 IndexedDB，不会上传到本应用服务器。</p>
+          <p>
+            Key 只存在本机浏览器。图片会先本地 OCR 再发给模型；DeepSeek 填
+            <code> https://api.deepseek.com/v1 </code>+
+            <code> deepseek-chat </code>
+            即可。
+          </p>
         </header>
 
         <label className="field">

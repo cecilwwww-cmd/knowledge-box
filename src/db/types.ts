@@ -14,6 +14,9 @@ export interface SourceItem {
   name: string
   mimeType: string
   textContent: string
+  /** 图片等可附带 data URL，便于多模态模型识图 */
+  dataUrl?: string
+  kind?: 'text' | 'html' | 'pdf' | 'word' | 'image' | 'unknown'
   size: number
   createdAt: number
 }
