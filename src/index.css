@@ -918,6 +918,16 @@ body.resizing * {
   stroke-linejoin: miter;
 }
 
+.textbook-mindmap me-tpc .katex {
+  font-size: 1em;
+  line-height: 1.2;
+}
+
+.textbook-mindmap me-tpc .katex-display {
+  margin: 0.15em 0;
+  overflow: visible;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

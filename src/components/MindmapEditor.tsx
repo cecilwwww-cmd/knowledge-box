@@ -2,6 +2,7 @@ import MindElixir from 'mind-elixir'
 import type { MindElixirData } from 'mind-elixir'
 import 'mind-elixir/style.css'
 import { useEffect, useRef } from 'react'
+import { renderMindmapTopicMarkdown } from '../lib/mindmapMarkdown'
 import { TEXTBOOK_MINDMAP_THEME } from '../lib/mindmapTheme'
 
 interface Props {
@@ -30,6 +31,7 @@ export function MindmapEditor({ data, onChange }: Props) {
       theme: TEXTBOOK_MINDMAP_THEME,
       generateMainBranch: TEXTBOOK_MINDMAP_THEME.generateMainBranch,
       generateSubBranch: TEXTBOOK_MINDMAP_THEME.generateSubBranch,
+      markdown: (md) => renderMindmapTopicMarkdown(md),
     })
 
     const initial: MindElixirData =
