@@ -8,6 +8,10 @@ import { SettingsModal } from './components/SettingsModal'
 import { Sidebar } from './components/Sidebar'
 import { SourcesPanel } from './components/SourcesPanel'
 import { useKnowledgeStore } from './hooks/useKnowledgeStore'
+import {
+  filesFromClipboard,
+  isEditablePasteTarget,
+} from './lib/clipboardFiles'
 
 const COLLAPSE_KEY = 'knowledge-box-sidebar-collapsed'
 const COLLAPSED_WIDTH = 44
@@ -32,6 +36,22 @@ export default function App() {
       organizeCollapsed ? '1' : '0',
     )
   }, [organizeCollapsed])
+
+  // 整理条展开时：在非输入框处 Ctrl+V 可粘贴截图/文字进原料
+  useEffect(() => {
+    if (organizeCollapsed || !store.selectedId) return
+    const onPaste = (e: ClipboardEvent) => {
+      if (isEditablePasteTarget(e.target)) return
+      void (async () => {
+        const files = await filesFromClipboard(e.clipboardData)
+        if (!files.length) return
+        e.preventDefault()
+        void store.addFiles(files)
+      })()
+    }
+    window.addEventListener('paste', onPaste)
+    return () => window.removeEventListener('paste', onPaste)
+  }, [organizeCollapsed, store.selectedId, store.addFiles])
 
   if (!store.ready) {
     return <div className="boot">正在打开本地知识箱…</div>

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { filesFromClipboard } from '../lib/clipboardFiles'
 
 interface Props {
   prompt: string
@@ -14,14 +15,26 @@ interface Props {
 
 export function OrganizeBar(props: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const dropRef = useRef<HTMLDivElement>(null)
   const [dragging, setDragging] = useState(false)
   const [titleMode, setTitleMode] = useState<'ai' | 'manual'>('ai')
   const [manualTitle, setManualTitle] = useState('')
 
+  const ingestPaste = async (e: React.ClipboardEvent | ClipboardEvent) => {
+    if (props.disabled) return
+    const files = await filesFromClipboard(e.clipboardData)
+    if (!files.length) return
+    e.preventDefault()
+    props.onFiles(files)
+  }
+
   return (
     <div className="organize-bar">
       <div
+        ref={dropRef}
         className={`drop-zone ${dragging ? 'dragging' : ''}`}
+        tabIndex={0}
+        title="点击选择文件，或拖入 / Ctrl+V 粘贴图文"
         onDragOver={(e) => {
           e.preventDefault()
           setDragging(true)
@@ -33,8 +46,12 @@ export function OrganizeBar(props: Props) {
           if (e.dataTransfer.files?.length) props.onFiles(e.dataTransfer.files)
         }}
         onClick={() => inputRef.current?.click()}
+        onPaste={(e) => {
+          void ingestPaste(e)
+        }}
       >
-        <span>拖入图文/PDF/Word/HTML</span>
+        <span>拖入或粘贴图文 / PDF / Word / HTML</span>
+        <small className="drop-hint">支持 Ctrl+V 粘贴截图或文字</small>
         <input
           ref={inputRef}
           type="file"
