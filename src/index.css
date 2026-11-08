@@ -241,12 +241,46 @@ body.resizing * {
 
 .classify-bar {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
   padding: 8px 10px;
   border-top: 1px solid var(--line);
   background: #f3f7f4;
   font-size: 12px;
+}
+
+.classify-title-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.classify-title-opts label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.classify-title-opts label.on {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.classify-title-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.classify-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .classify-bar .primary {

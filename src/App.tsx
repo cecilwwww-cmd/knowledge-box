@@ -69,7 +69,7 @@ export default function App() {
         onToggleClassifyMode={store.toggleClassifyMode}
         onToggleChecked={store.toggleChecked}
         onClearChecked={store.clearChecked}
-        onStartRollup={() => void store.startRollup()}
+        onStartRollup={(opts) => void store.startRollup(opts)}
         rollupBusy={store.organizing}
       />
 

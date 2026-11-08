@@ -43,8 +43,10 @@ export async function runRollupOrganize(options: {
   settings: AppSettings
   children: RollupChildInput[]
   prompt?: string
+  /** 用户自命名时传入；不传则由 AI 总结标题 */
+  fixedTitle?: string
 }): Promise<{ preview: OrganizePreview; mindElixirData: unknown; title: string }> {
-  const { settings, children, prompt } = options
+  const { settings, children, prompt, fixedTitle } = options
   if (!settings.apiKey.trim()) {
     throw new Error('请先在设置里填写 API Key')
   }
@@ -53,6 +55,10 @@ export async function runRollupOrganize(options: {
   }
   if (children.length > 12) {
     throw new Error('一次最多归类 12 个节点，请分批收拢')
+  }
+  const manualTitle = fixedTitle?.trim()
+  if (fixedTitle !== undefined && !manualTitle) {
+    throw new Error('请填写上级节点标题')
   }
 
   const childBlock = children
@@ -78,10 +84,11 @@ ${md || '（暂无详情）'}`
 1. markdown 是对子节点的概况归纳：主题脉络、共性、对照要点；禁止复制粘贴子节点全文。
 2. mindmap 只提炼各大块主干（大约 3～8 个一级分支即可），不要把子节点细枝末节全摊上来；分支可用子节点名作线索，但内容要概括。
 3. 公式用 $...$ 或 $$...$$，不要用方括号包公式。
-4. 不要输出 suggestedChildren，不要建议再往下拆子节点。`
+4. 不要输出 suggestedChildren，不要建议再往下拆子节点。
+${manualTitle ? `5. 用户已指定父节点标题为「${manualTitle}」：JSON 的 title 与 mindmap.topic 必须使用该标题（可在 topic 上轻微补全，但目录名以用户标题为准）。` : '5. 请根据子节点内容总结一个简洁准确的父节点标题。'}`
 
   const user = `整理方向：${prompt || '把勾选的零散知识收成上一层目录，并写概况与总览导图。'}
-
+${manualTitle ? `用户指定标题：${manualTitle}\n` : '标题模式：由你总结命名。\n'}
 以下是子节点材料：
 ${childBlock}`
 
@@ -122,9 +129,11 @@ ${childBlock}`
     markdown?: string
   }
 
-  const title = (parsed.title || parsed.mindmap?.topic || '归类').trim()
-  if (!parsed.mindmap?.topic) {
+  const title = (manualTitle || parsed.title || parsed.mindmap?.topic || '归类').trim()
+  if (!parsed.mindmap) {
     parsed.mindmap = { topic: title, children: [] }
+  } else {
+    parsed.mindmap.topic = title
   }
 
   const preview: OrganizePreview = {

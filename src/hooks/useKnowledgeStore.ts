@@ -343,54 +343,68 @@ export function useKnowledgeStore() {
 
   const clearChecked = useCallback(() => setCheckedIds([]), [])
 
-  const startRollup = useCallback(async () => {
-    if (checkedIds.length < 2) {
-      setError('请至少勾选 2 个节点')
-      return
-    }
-    setOrganizing(true)
-    setError(null)
-    try {
-      const all = await db.nodes.toArray()
-      assertNoAncestorPairs(all, checkedIds)
-      setStatus('正在生成上级节点概况与总览导图…')
-      const children = []
-      for (const id of checkedIds) {
-        const node = all.find((n) => n.id === id)
-        if (!node) continue
-        const d = await db.details.get(id)
-        const m = await db.mindmaps.get(id)
-        children.push({
-          id,
-          title: node.title,
-          markdown: d?.markdown ?? '',
-          mindmapOutline: outlineFromMindElixir(m?.data),
-        })
+  const startRollup = useCallback(
+    async (opts?: { titleMode?: 'ai' | 'manual'; manualTitle?: string }) => {
+      if (checkedIds.length < 2) {
+        setError('请至少勾选 2 个节点')
+        return
       }
-      const result = await runRollupOrganize({
-        settings,
-        children,
-        prompt,
-      })
-      setPreview({
-        mode: 'rollup',
-        preview: result.preview,
-        mindElixirData: result.mindElixirData,
-        prompt,
-        rollupTitle: result.title,
-        childIds: children.map((c) => c.id),
-      })
-      setStatus(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
-      setStatus(null)
-    } finally {
-      setOrganizing(false)
-    }
-  }, [checkedIds, settings, prompt])
+      const titleMode = opts?.titleMode ?? 'ai'
+      const manualTitle = opts?.manualTitle?.trim()
+      if (titleMode === 'manual' && !manualTitle) {
+        setError('请先填写上级节点标题，或改选「AI 总结标题」')
+        return
+      }
+      setOrganizing(true)
+      setError(null)
+      try {
+        const all = await db.nodes.toArray()
+        assertNoAncestorPairs(all, checkedIds)
+        setStatus(
+          titleMode === 'manual'
+            ? `正在按标题「${manualTitle}」生成概况与总览导图…`
+            : '正在总结标题并生成上级概况与总览导图…',
+        )
+        const children = []
+        for (const id of checkedIds) {
+          const node = all.find((n) => n.id === id)
+          if (!node) continue
+          const d = await db.details.get(id)
+          const m = await db.mindmaps.get(id)
+          children.push({
+            id,
+            title: node.title,
+            markdown: d?.markdown ?? '',
+            mindmapOutline: outlineFromMindElixir(m?.data),
+          })
+        }
+        const result = await runRollupOrganize({
+          settings,
+          children,
+          prompt,
+          fixedTitle: titleMode === 'manual' ? manualTitle : undefined,
+        })
+        setPreview({
+          mode: 'rollup',
+          preview: result.preview,
+          mindElixirData: result.mindElixirData,
+          prompt,
+          rollupTitle: result.title,
+          childIds: children.map((c) => c.id),
+        })
+        setStatus(null)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e))
+        setStatus(null)
+      } finally {
+        setOrganizing(false)
+      }
+    },
+    [checkedIds, settings, prompt],
+  )
 
   const applyPreview = useCallback(
-    async (opts: { mindmap: boolean; detail: boolean }) => {
+    async (opts: { mindmap: boolean; detail: boolean; title?: string }) => {
       if (!preview) return
       const now = Date.now()
 
@@ -400,8 +414,15 @@ export function useKnowledgeStore() {
         assertNoAncestorPairs(all, childIds)
         const parentOfGroup = commonParentId(all, childIds)
         const siblings = all.filter((n) => n.parentId === parentOfGroup)
-        const title = preview.rollupTitle || preview.preview.mindmap.topic
+        const title = (
+          opts.title?.trim() ||
+          preview.rollupTitle ||
+          preview.preview.mindmap.topic
+        ).trim()
         const parentId = crypto.randomUUID()
+        const mindData = opts.mindmap
+          ? patchMindElixirTopic(preview.mindElixirData, title)
+          : defaultMindmap(title)
 
         await db.transaction(
           'rw',
@@ -430,19 +451,11 @@ export function useKnowledgeStore() {
                 updatedAt: now,
               })
             }
-            if (opts.mindmap) {
-              await db.mindmaps.put({
-                nodeId: parentId,
-                data: preview.mindElixirData,
-                updatedAt: now,
-              })
-            } else {
-              await db.mindmaps.put({
-                nodeId: parentId,
-                data: defaultMindmap(title),
-                updatedAt: now,
-              })
-            }
+            await db.mindmaps.put({
+              nodeId: parentId,
+              data: mindData,
+              updatedAt: now,
+            })
             if (opts.detail) {
               await db.details.put({
                 nodeId: parentId,
@@ -564,6 +577,13 @@ export function useKnowledgeStore() {
 }
 
 export type TreeNode = KnowledgeNode & { children: TreeNode[] }
+
+function patchMindElixirTopic(data: unknown, title: string): unknown {
+  if (!data || typeof data !== 'object') return defaultMindmap(title)
+  const cloned = structuredClone(data) as { nodeData?: { topic?: string } }
+  if (cloned.nodeData) cloned.nodeData.topic = title
+  return cloned
+}
 
 function buildTree(nodes: KnowledgeNode[]): TreeNode[] {
   const map = new Map<string, TreeNode>()

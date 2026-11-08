@@ -6,7 +6,7 @@ interface Props {
   mode?: 'organize' | 'rollup'
   parentTitle?: string
   onCancel: () => void
-  onApply: (opts: { mindmap: boolean; detail: boolean }) => void
+  onApply: (opts: { mindmap: boolean; detail: boolean; title?: string }) => void
 }
 
 export function PreviewModal({
@@ -18,6 +18,9 @@ export function PreviewModal({
 }: Props) {
   const [mindmap, setMindmap] = useState(true)
   const [detail, setDetail] = useState(true)
+  const [title, setTitle] = useState(
+    parentTitle || preview.mindmap.topic || '',
+  )
   const isRollup = mode === 'rollup'
 
   return (
@@ -27,10 +30,21 @@ export function PreviewModal({
           <h2>{isRollup ? '上级节点预览' : '整理预览'}</h2>
           <p>
             {isRollup
-              ? `将创建「${parentTitle || preview.mindmap.topic}」，并把勾选节点收拢为其子节点。详情为概况，导图为大块总览。`
+              ? '将创建上级节点并把勾选节点收拢为其子节点。详情为概况，导图为大块总览；标题可再改。'
               : '确认后再写入。写入前会自动保存当前版本快照。'}
           </p>
         </header>
+
+        {isRollup ? (
+          <label className="field">
+            <span>上级标题</span>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="上级节点标题"
+            />
+          </label>
+        ) : null}
 
         <div className="preview-grid">
           <section>
@@ -69,8 +83,14 @@ export function PreviewModal({
           <button
             type="button"
             className="primary"
-            disabled={!mindmap && !detail}
-            onClick={() => onApply({ mindmap, detail })}
+            disabled={(!mindmap && !detail) || (isRollup && !title.trim())}
+            onClick={() =>
+              onApply({
+                mindmap,
+                detail,
+                title: isRollup ? title.trim() : undefined,
+              })
+            }
           >
             {isRollup ? '确认生成上级' : '确认写入'}
           </button>

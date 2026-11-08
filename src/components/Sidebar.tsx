@@ -46,7 +46,10 @@ interface Props {
   onToggleClassifyMode: () => void
   onToggleChecked: (id: string) => void
   onClearChecked: () => void
-  onStartRollup: () => void
+  onStartRollup: (opts: {
+    titleMode: 'ai' | 'manual'
+    manualTitle?: string
+  }) => void
   rollupBusy?: boolean
 }
 
@@ -69,6 +72,8 @@ export function Sidebar(props: Props) {
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [flyout, setFlyout] = useState<HoverFlyoutState | null>(null)
   const [flyoutVisible, setFlyoutVisible] = useState(false)
+  const [titleMode, setTitleMode] = useState<'ai' | 'manual'>('ai')
+  const [manualTitle, setManualTitle] = useState('')
   const menuRef = useRef<HTMLDivElement>(null)
   const flyoutRef = useRef<HTMLDivElement>(null)
   const leaveTimer = useRef<number | null>(null)
@@ -230,20 +235,59 @@ export function Sidebar(props: Props) {
           />
         ))}
       </div>
-      {props.classifyMode && props.checkedIds.length > 0 ? (
+      {props.classifyMode ? (
         <div className="classify-bar">
-          <span>已选 {props.checkedIds.length}</span>
-          <button type="button" onClick={props.onClearChecked}>
-            清空
-          </button>
-          <button
-            type="button"
-            className="primary"
-            disabled={props.checkedIds.length < 2 || props.rollupBusy}
-            onClick={props.onStartRollup}
-          >
-            {props.rollupBusy ? '生成中…' : '生成上级'}
-          </button>
+          <div className="classify-title-opts">
+            <label className={titleMode === 'ai' ? 'on' : ''}>
+              <input
+                type="radio"
+                name="rollup-title-mode"
+                checked={titleMode === 'ai'}
+                onChange={() => setTitleMode('ai')}
+              />
+              AI 总结标题
+            </label>
+            <label className={titleMode === 'manual' ? 'on' : ''}>
+              <input
+                type="radio"
+                name="rollup-title-mode"
+                checked={titleMode === 'manual'}
+                onChange={() => setTitleMode('manual')}
+              />
+              自己命名
+            </label>
+          </div>
+          {titleMode === 'manual' ? (
+            <input
+              className="classify-title-input"
+              value={manualTitle}
+              onChange={(e) => setManualTitle(e.target.value)}
+              placeholder="输入上级节点标题"
+            />
+          ) : null}
+          <div className="classify-bar-actions">
+            <span>已选 {props.checkedIds.length}</span>
+            <button type="button" onClick={props.onClearChecked}>
+              清空
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={
+                props.checkedIds.length < 2 ||
+                props.rollupBusy ||
+                (titleMode === 'manual' && !manualTitle.trim())
+              }
+              onClick={() =>
+                props.onStartRollup({
+                  titleMode,
+                  manualTitle: manualTitle.trim(),
+                })
+              }
+            >
+              {props.rollupBusy ? '生成中…' : '生成上级'}
+            </button>
+          </div>
         </div>
       ) : null}
       <div className="sidebar-footer">
