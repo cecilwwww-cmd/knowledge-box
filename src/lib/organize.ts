@@ -56,9 +56,23 @@ ${existingMarkdown ? `现有详细内容（可合并改写，勿无故删掉重�
 原料：
 ${sourceBlock || '（无附加原料，仅按提示词与节点标题整理）'}`
 
+  return text
+}
+
+function modelSupportsVision(modelName: string) {
+  return /gpt-4o|gpt-4\.1|claude|gemini|vision|qwen-vl|glm-4v|moonshot-v1/i.test(
+    modelName,
+  )
+}
+
+function withOptionalImages(
+  text: string,
+  sources: SourceItem[],
+  modelName: string,
+): ChatContent {
+  if (!modelSupportsVision(modelName)) return text
   const images = sources.filter((s) => s.kind === 'image' && s.dataUrl).slice(0, 4)
   if (!images.length) return text
-
   return [
     { type: 'text', text },
     ...images.map((img) => ({
@@ -92,11 +106,10 @@ export async function runOrganize(options: {
 }
 要求：思维导图层次清晰；详细内容可独立阅读；引用原料时可用「来源N」标记；不要声称无法解析图片，应基于已提供的 OCR 文本与图片作答。`
 
-  const userContent = buildUserContent(
-    nodeTitle,
-    prompt,
+  const userContent = withOptionalImages(
+    buildUserContent(nodeTitle, prompt, sources, options.existingMarkdown) as string,
     sources,
-    options.existingMarkdown,
+    settings.modelName,
   )
 
   const base = settings.apiBaseUrl.replace(/\/$/, '')
