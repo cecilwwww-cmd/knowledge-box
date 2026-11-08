@@ -1,4 +1,5 @@
 import type { AppSettings, MindmapTreeNode, OrganizePreview, SourceItem } from '../db/types'
+import { normalizeMathMarkdown } from './normalizeMathMarkdown'
 
 type ChatContent =
   | string
@@ -163,7 +164,8 @@ export async function runOrganize(options: {
   "markdown": "详细内容，使用 Markdown",
   "suggestedChildren": ["可选的子节点标题"]
 }
-要求：思维导图层次清晰；详细内容可独立阅读；引用原料时可用「来源N」标记。`
+要求：思维导图层次清晰；详细内容可独立阅读；引用原料时可用「来源N」标记。
+公式必须用 KaTeX 兼容写法：行内 $E=IR$，独立公式用 $$...$$（不要用 [ ] 或 \\[ \\] 包公式）。`
 
   const userContent = await buildUserContent(
     nodeTitle,
@@ -232,7 +234,9 @@ function parseOrganizeResponse(data: {
 
   const preview: OrganizePreview = {
     mindmap: parsed.mindmap,
-    markdown: parsed.markdown || `# ${parsed.mindmap.topic}\n`,
+    markdown: normalizeMathMarkdown(
+      parsed.markdown || `# ${parsed.mindmap.topic}\n`,
+    ),
     suggestedChildren: parsed.suggestedChildren,
   }
 

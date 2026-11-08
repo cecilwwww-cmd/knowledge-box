@@ -9,6 +9,7 @@ import type {
   SourceItem,
 } from '../db/types'
 import { extractFromFile } from '../lib/extractText'
+import { normalizeMathMarkdown } from '../lib/normalizeMathMarkdown'
 import { runOrganize } from '../lib/organize'
 
 export function useKnowledgeStore() {
@@ -210,7 +211,7 @@ export function useKnowledgeStore() {
     if (!selectedId) return
     await db.details.put({
       nodeId: selectedId,
-      markdown,
+      markdown: normalizeMathMarkdown(markdown),
       updatedAt: Date.now(),
     })
     await db.nodes.update(selectedId, { updatedAt: Date.now() })
@@ -308,7 +309,7 @@ export function useKnowledgeStore() {
       if (opts.detail) {
         await db.details.put({
           nodeId: selected.id,
-          markdown: preview.preview.markdown,
+          markdown: normalizeMathMarkdown(preview.preview.markdown),
           updatedAt: now,
         })
       }

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import Vditor from 'vditor'
 import 'vditor/dist/index.css'
+import { normalizeMathMarkdown } from '../lib/normalizeMathMarkdown'
 
 interface Props {
   markdown: string
@@ -16,12 +17,13 @@ export function DetailEditor({ markdown, onChange }: Props) {
   useEffect(() => {
     if (!hostRef.current) return
     let cancelled = false
+    const initial = normalizeMathMarkdown(markdown)
 
     const editor = new Vditor(hostRef.current, {
       height: '100%',
       mode: 'ir',
-      value: markdown,
-      placeholder: '直接写 Markdown，内容会即时渲染…',
+      value: initial,
+      placeholder: '直接写 Markdown；公式用 $行内$ 或 $$独立公式$$',
       cache: { enable: false },
       toolbar: [
         'headings',
@@ -45,6 +47,10 @@ export function DetailEditor({ markdown, onChange }: Props) {
         'fullscreen',
       ],
       preview: {
+        math: {
+          engine: 'KaTeX',
+          inlineDigit: true,
+        },
         markdown: {
           toc: false,
         },
@@ -55,6 +61,9 @@ export function DetailEditor({ markdown, onChange }: Props) {
           return
         }
         editorRef.current = editor
+        if (initial !== markdown) {
+          onChangeRef.current(initial)
+        }
       },
       input: (value) => {
         onChangeRef.current(value)
@@ -81,9 +90,10 @@ export function DetailEditor({ markdown, onChange }: Props) {
   useEffect(() => {
     const editor = editorRef.current
     if (!editor) return
+    const next = normalizeMathMarkdown(markdown)
     try {
-      if (editor.getValue() !== markdown) {
-        editor.setValue(markdown, true)
+      if (editor.getValue() !== next) {
+        editor.setValue(next, true)
       }
     } catch {
       // editor may not be ready
