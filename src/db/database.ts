@@ -96,13 +96,9 @@ export async function ensureSeedData() {
         },
       ])
 
-      await db.settings.put({
-        id: 'main',
-        apiBaseUrl: 'https://api.openai.com/v1',
-        apiKey: '',
-        modelName: 'gpt-4o-mini',
-        sendImages: true,
-      })
+      await db.settings.put(
+        (await import('../config')).defaultAppSettings(),
+      )
     },
   )
 }

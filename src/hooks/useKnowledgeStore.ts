@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { appConfig, defaultAppSettings } from '../config'
 import { db, defaultMindmap, ensureSeedData } from '../db/database'
 import type {
   AppSettings,
@@ -31,6 +32,22 @@ export function useKnowledgeStore() {
   useEffect(() => {
     ensureSeedData()
       .then(async () => {
+        // 部署时写入的管理员 DeepSeek 配置：覆盖本机旧设置，保证终端用户共用识图模型
+        if (appConfig.lockApiSettings || appConfig.apiKey) {
+          await db.settings.put(defaultAppSettings())
+        } else {
+          const cur = await db.settings.get('main')
+          if (cur && /deepseek-chat|deepseek-reasoner/i.test(cur.modelName)) {
+            await db.settings.put({
+              ...cur,
+              modelName: 'deepseek-flash',
+              apiBaseUrl: cur.apiBaseUrl.includes('deepseek')
+                ? cur.apiBaseUrl
+                : 'https://api.deepseek.com/v1',
+              sendImages: true,
+            })
+          }
+        }
         const first = await db.nodes.orderBy('sort').first()
         setSelectedId((id) => id ?? first?.id ?? null)
         setReady(true)
@@ -39,15 +56,15 @@ export function useKnowledgeStore() {
   }, [])
 
   const nodes = useLiveQuery(() => db.nodes.toArray(), []) ?? []
-  const settings =
-    useLiveQuery(() => db.settings.get('main'), []) ??
-    ({
-      id: 'main',
-      apiBaseUrl: 'https://api.openai.com/v1',
-      apiKey: '',
-      modelName: 'gpt-4o-mini',
-      sendImages: true,
-    } satisfies AppSettings)
+  const storedSettings =
+    useLiveQuery(() => db.settings.get('main'), []) ?? defaultAppSettings()
+  const settings: AppSettings =
+    appConfig.lockApiSettings || appConfig.apiKey
+      ? {
+          ...storedSettings,
+          ...defaultAppSettings(),
+        }
+      : storedSettings
 
   const selected = useMemo(
     () => nodes.find((n) => n.id === selectedId) ?? null,

@@ -4,7 +4,7 @@ type ChatContent =
   | string
   | Array<
       | { type: 'text'; text: string }
-      | { type: 'image_url'; image_url: { url: string } }
+      | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' | 'original' } }
     >
 
 function treeToMindElixir(tree: MindmapTreeNode) {
@@ -33,8 +33,8 @@ function extractJson(text: string): unknown {
   throw new Error('模型返回中未找到 JSON')
 }
 
-/** 压缩 data URL，避免请求体过大 */
-async function compressDataUrl(dataUrl: string, maxSide = 1400): Promise<string> {
+/** 压缩 data URL，避免请求体过大（DeepSeek 请求体上限 48MiB） */
+async function compressDataUrl(dataUrl: string, maxSide = 1600): Promise<string> {
   if (!dataUrl.startsWith('data:image')) return dataUrl
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const el = new Image()
@@ -53,19 +53,18 @@ async function compressDataUrl(dataUrl: string, maxSide = 1400): Promise<string>
   ctx.fillStyle = '#fff'
   ctx.fillRect(0, 0, w, h)
   ctx.drawImage(img, 0, 0, w, h)
-  return canvas.toDataURL('image/jpeg', 0.85)
+  return canvas.toDataURL('image/jpeg', 0.88)
 }
 
-function looksLikeVisionModel(modelName: string) {
-  return /gpt-4o|gpt-4\.1|gpt-5|o[0-9]|claude|gemini|vision|vl|glm-4v|qwen2?\.?5?-?vl|moonshot|doubao|step-1v|yi-vision/i.test(
-    modelName,
-  )
-}
-
+/** 明确不支持 image_url 的纯文本模型 */
 function looksLikeTextOnlyModel(modelName: string) {
-  return /deepseek-chat|deepseek-reasoner|deepseek-coder|^gpt-3\.5|^o1-mini/i.test(
-    modelName,
+  return /^(deepseek-chat|deepseek-reasoner|deepseek-coder|gpt-3\.5|o1-mini)(-|$)/i.test(
+    modelName.trim(),
   )
+}
+
+function isDeepSeekFlash(modelName: string) {
+  return /deepseek-flash|deepseek-v4.*flash|flash-vision/i.test(modelName)
 }
 
 function buildTextPrompt(
@@ -80,7 +79,7 @@ function buildTextPrompt(
       const head = `### 来源 ${i + 1}: ${s.name}${s.kind ? `（${s.kind}）` : ''}`
       if (s.kind === 'image' && sendingImages) {
         const ocrHint = s.textContent
-          ? `\n本地 OCR 仅供参考（常有错字，示意图无法靠 OCR 理解）：\n${s.textContent.slice(0, 2500)}`
+          ? `\n本地 OCR 仅供参考（常有错字，示意图无法靠 OCR 理解）：\n${s.textContent.slice(0, 1800)}`
           : ''
         return `${head}\n已附带原图，请直接看图理解题干、坐标/受力示意图与侧边要点。${ocrHint}`
       }
@@ -120,12 +119,15 @@ async function buildUserContent(
 
   const parts: Array<
     | { type: 'text'; text: string }
-    | { type: 'image_url'; image_url: { url: string } }
+    | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' | 'original' } }
   > = [{ type: 'text', text }]
 
   for (const img of imageSources) {
     const url = await compressDataUrl(img.dataUrl!)
-    parts.push({ type: 'image_url', image_url: { url } })
+    parts.push({
+      type: 'image_url',
+      image_url: { url, detail: 'high' },
+    })
   }
   return parts
 }
@@ -141,7 +143,7 @@ export async function runOrganize(options: {
   const { settings, nodeTitle, prompt, sources } = options
 
   if (!settings.apiKey.trim()) {
-    throw new Error('请先在设置里填写 API Key')
+    throw new Error('请先在设置里填写 API Key（或由管理员在部署环境变量里配置）')
   }
 
   const sendImages = settings.sendImages !== false
@@ -149,7 +151,7 @@ export async function runOrganize(options: {
 
   if (sendImages && hasImages && looksLikeTextOnlyModel(settings.modelName)) {
     throw new Error(
-      `当前模型「${settings.modelName}」是纯文本，看不懂示意图。请到设置打开「发送原图给模型」，并把模型换成 gpt-4o / qwen-vl-plus / glm-4v 等识图模型（API 需支持 OpenAI 兼容的 image_url）。`,
+      `「${settings.modelName}」是纯文本模型，看不懂示意图。请改用 deepseek-flash（官方识图模型）。`,
     )
   }
 
@@ -171,50 +173,51 @@ export async function runOrganize(options: {
     sendImages,
   )
 
-  if (
-    sendImages &&
-    hasImages &&
-    typeof userContent === 'string' &&
-    !looksLikeVisionModel(settings.modelName)
-  ) {
-    // 图片未附上（异常），仍给出提示
-    throw new Error('未能附带原图，请重新拖入图片后再整理')
+  const base = settings.apiBaseUrl.replace(/\/$/, '')
+  const body: Record<string, unknown> = {
+    model: settings.modelName,
+    temperature: 0.3,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: userContent },
+    ],
   }
 
-  const base = settings.apiBaseUrl.replace(/\/$/, '')
+  // deepseek-flash 默认可能开思考链，整理任务关掉以免拖慢/污染 JSON
+  if (isDeepSeekFlash(settings.modelName)) {
+    body.reasoning_effort = 'none'
+  }
+
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${settings.apiKey}`,
     },
-    body: JSON.stringify({
-      model: settings.modelName,
-      temperature: 0.3,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: userContent },
-      ],
-    }),
+    body: JSON.stringify(body),
   })
 
   if (!res.ok) {
     const errText = await res.text()
     if (Array.isArray(userContent) && /image|vision|multimodal|不支持|invalid/i.test(errText)) {
       throw new Error(
-        `当前接口/模型不支持识图（${settings.modelName}）。DeepSeek Chat 等纯文本模型无法理解示意图；请换成 gpt-4o、qwen-vl-plus、glm-4v 等，并使用对应的 Base URL。原始错误：${errText.slice(0, 180)}`,
+        `当前模型「${settings.modelName}」未接受图片。识图请使用 deepseek-flash，Base URL 填 https://api.deepseek.com/v1。原始错误：${errText.slice(0, 180)}`,
       )
     }
     throw new Error(`模型请求失败 (${res.status}): ${errText.slice(0, 300)}`)
   }
 
-  return parseOrganizeResponse(await res.json())
+  const data = await res.json()
+  return parseOrganizeResponse(data)
 }
 
 function parseOrganizeResponse(data: {
-  choices?: Array<{ message?: { content?: string } }>
+  choices?: Array<{
+    message?: { content?: string; reasoning_content?: string }
+  }>
 }): { preview: OrganizePreview; mindElixirData: unknown } {
-  const content = data.choices?.[0]?.message?.content
+  const message = data.choices?.[0]?.message
+  const content = message?.content?.trim() || message?.reasoning_content?.trim()
   if (!content) throw new Error('模型没有返回内容')
 
   const parsed = extractJson(content) as {
