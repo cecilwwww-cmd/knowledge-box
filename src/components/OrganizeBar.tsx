@@ -15,26 +15,46 @@ interface Props {
 
 export function OrganizeBar(props: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const dropRef = useRef<HTMLDivElement>(null)
+  const pasteRef = useRef<HTMLTextAreaElement>(null)
   const [dragging, setDragging] = useState(false)
   const [titleMode, setTitleMode] = useState<'ai' | 'manual'>('ai')
   const [manualTitle, setManualTitle] = useState('')
+  const [pasteDraft, setPasteDraft] = useState('')
 
-  const ingestPaste = (e: React.ClipboardEvent) => {
+  const ingestFiles = (files: File[]) => {
+    if (!files.length || props.disabled) return
+    props.onFiles(files)
+  }
+
+  const ingestPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     if (props.disabled) return
     const files = filesFromClipboard(e.clipboardData)
-    if (!files.length) return
-    e.preventDefault()
-    props.onFiles(files)
+    if (files.length) {
+      e.preventDefault()
+      ingestFiles(files)
+      setPasteDraft('')
+      return
+    }
+    // 无图片时保留默认文字粘贴，可再点「加入原料」
+  }
+
+  const commitPasteText = () => {
+    const text = pasteDraft.trim()
+    if (!text || props.disabled) return
+    const stamp = new Date()
+      .toISOString()
+      .replace(/[:.]/g, '-')
+      .slice(0, 19)
+    ingestFiles([
+      new File([text], `paste-${stamp}.txt`, { type: 'text/plain' }),
+    ])
+    setPasteDraft('')
   }
 
   return (
     <div className="organize-bar">
       <div
-        ref={dropRef}
         className={`drop-zone ${dragging ? 'dragging' : ''}`}
-        tabIndex={0}
-        title="点击选择文件，或拖入 / Ctrl+V 粘贴图文"
         onDragOver={(e) => {
           e.preventDefault()
           setDragging(true)
@@ -43,13 +63,44 @@ export function OrganizeBar(props: Props) {
         onDrop={(e) => {
           e.preventDefault()
           setDragging(false)
-          if (e.dataTransfer.files?.length) props.onFiles(e.dataTransfer.files)
+          if (e.dataTransfer.files?.length) {
+            ingestFiles(Array.from(e.dataTransfer.files))
+          }
         }}
-        onClick={() => inputRef.current?.click()}
-        onPaste={ingestPaste}
       >
-        <span>拖入或粘贴图文 / PDF / Word / HTML</span>
-        <small className="drop-hint">支持 Ctrl+V 粘贴截图或文字</small>
+        <textarea
+          ref={pasteRef}
+          className="paste-box"
+          disabled={props.disabled}
+          value={pasteDraft}
+          placeholder="在此 Ctrl+V 粘贴截图或文字…"
+          onChange={(e) => setPasteDraft(e.target.value)}
+          onPaste={ingestPaste}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              e.preventDefault()
+              commitPasteText()
+            }
+          }}
+        />
+        <div className="drop-zone-actions">
+          <button
+            type="button"
+            className="drop-link"
+            disabled={props.disabled}
+            onClick={() => inputRef.current?.click()}
+          >
+            选择文件
+          </button>
+          <button
+            type="button"
+            className="drop-link"
+            disabled={props.disabled || !pasteDraft.trim()}
+            onClick={commitPasteText}
+          >
+            加入文字原料
+          </button>
+        </div>
         <input
           ref={inputRef}
           type="file"
@@ -57,7 +108,7 @@ export function OrganizeBar(props: Props) {
           hidden
           accept=".txt,.md,.html,.htm,.pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,.bmp,text/*,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           onChange={(e) => {
-            if (e.target.files?.length) props.onFiles(e.target.files)
+            if (e.target.files?.length) ingestFiles(Array.from(e.target.files))
             e.target.value = ''
           }}
         />
