@@ -867,7 +867,55 @@ body.resizing * {
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
-  background: #fff;
+  background: #f7f8fa;
+}
+
+/* 教材逻辑图式：根粗框、一级描边盒、深层下划线文本 */
+.textbook-mindmap .map-container {
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.textbook-mindmap me-root > me-tpc {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  border-width: 2.5px !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  padding: 10px 22px !important;
+}
+
+.textbook-mindmap me-main > me-wrapper > me-parent > me-tpc {
+  font-size: 14px !important;
+  font-weight: 650 !important;
+  background: #fff !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+  padding: 7px 16px !important;
+  box-shadow: none !important;
+}
+
+/* 二级及以下：去卡片感，改成下划线知识点 */
+.textbook-mindmap me-main me-children me-tpc {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  border-bottom: 1.5px solid currentColor !important;
+  padding: 2px 2px 3px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+}
+
+.textbook-mindmap me-main me-children me-children me-tpc {
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  opacity: 0.92;
+  border-bottom-width: 1px !important;
+}
+
+.textbook-mindmap lines .line {
+  stroke-linecap: square;
+  stroke-linejoin: miter;
 }
 
 .modal-backdrop {

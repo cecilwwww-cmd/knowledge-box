@@ -2,6 +2,7 @@ import MindElixir from 'mind-elixir'
 import type { MindElixirData } from 'mind-elixir'
 import 'mind-elixir/style.css'
 import { useEffect, useRef } from 'react'
+import { TEXTBOOK_MINDMAP_THEME } from '../lib/mindmapTheme'
 
 interface Props {
   data: unknown
@@ -18,12 +19,17 @@ export function MindmapEditor({ data, onChange }: Props) {
 
     const mei = new MindElixir({
       el: hostRef.current,
-      direction: MindElixir.SIDE,
+      // 教材逻辑图：根在左，内容向右展开
+      direction: MindElixir.RIGHT,
       editable: true,
       contextMenu: true,
       toolBar: true,
       keypress: true,
       allowUndo: true,
+      alignment: 'nodes',
+      theme: TEXTBOOK_MINDMAP_THEME,
+      generateMainBranch: TEXTBOOK_MINDMAP_THEME.generateMainBranch,
+      generateSubBranch: TEXTBOOK_MINDMAP_THEME.generateSubBranch,
     })
 
     const initial: MindElixirData =
@@ -66,5 +72,5 @@ export function MindmapEditor({ data, onChange }: Props) {
     }
   }, [data])
 
-  return <div className="mindmap-host" ref={hostRef} />
+  return <div className="mindmap-host textbook-mindmap" ref={hostRef} />
 }

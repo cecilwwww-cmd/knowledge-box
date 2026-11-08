@@ -174,7 +174,8 @@ export async function runOrganize(options: {
   "mindmap": { "topic": "中心主题", "children": [ { "topic": "...", "children": [], "note": "可选短注" } ] },
   "markdown": "详细内容，使用 Markdown"
 }
-要求：思维导图层次清晰；详细内容可独立阅读；引用原料时可用「来源N」标记。
+要求：详细内容可独立阅读；引用原料时可用「来源N」标记。
+思维导图按「教材逻辑图」组织（非发散气球图）：根主题短；一级分支 3～6 个大块；二级为短标题；三级及以下才写要点短语；topic 尽量短（宁短勿长），层级清楚。
 重要：当前节点是最小知识单元。题干拆解、小问、受力分析等只能写进「详细内容」和「思维导图」，
 严禁输出 suggestedChildren，严禁要求在目录树下再建子节点（目录往上归类，不往下拆）。
 ${manualTitle ? `用户已指定目录标题「${manualTitle}」：title 与 mindmap.topic 必须使用该标题。` : '请根据原料总结 title（目录名），mindmap.topic 可与 title 一致或略完整。'}
