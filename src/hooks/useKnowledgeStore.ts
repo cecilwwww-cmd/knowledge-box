@@ -11,6 +11,12 @@ import type {
 import { extractFromFile } from '../lib/extractText'
 import { normalizeMathMarkdown } from '../lib/normalizeMathMarkdown'
 import { runOrganize } from '../lib/organize'
+import {
+  assertNoAncestorPairs,
+  commonParentId,
+  outlineFromMindElixir,
+  runRollupOrganize,
+} from '../lib/rollup'
 
 export function useKnowledgeStore() {
   const [ready, setReady] = useState(false)
@@ -23,12 +29,17 @@ export function useKnowledgeStore() {
   const [parsing, setParsing] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [preview, setPreview] = useState<{
+    mode: 'organize' | 'rollup'
     preview: OrganizePreview
     mindElixirData: unknown
     prompt: string
+    rollupTitle?: string
+    childIds?: string[]
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [classifyMode, setClassifyMode] = useState(false)
+  const [checkedIds, setCheckedIds] = useState<string[]>([])
 
   useEffect(() => {
     ensureSeedData()
@@ -276,7 +287,7 @@ export function useKnowledgeStore() {
         sources: currentSources,
         existingMarkdown: detail?.markdown,
       })
-      setPreview({ ...result, prompt })
+      setPreview({ mode: 'organize', ...result, prompt })
       setStatus(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -286,10 +297,146 @@ export function useKnowledgeStore() {
     }
   }, [selected, settings, prompt, detail?.markdown, parsing])
 
+  const toggleClassifyMode = useCallback(() => {
+    setClassifyMode((v) => {
+      if (v) setCheckedIds([])
+      return !v
+    })
+  }, [])
+
+  const toggleChecked = useCallback((id: string) => {
+    setCheckedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    )
+  }, [])
+
+  const clearChecked = useCallback(() => setCheckedIds([]), [])
+
+  const startRollup = useCallback(async () => {
+    if (checkedIds.length < 2) {
+      setError('请至少勾选 2 个节点')
+      return
+    }
+    setOrganizing(true)
+    setError(null)
+    try {
+      const all = await db.nodes.toArray()
+      assertNoAncestorPairs(all, checkedIds)
+      setStatus('正在生成上级节点概况与总览导图…')
+      const children = []
+      for (const id of checkedIds) {
+        const node = all.find((n) => n.id === id)
+        if (!node) continue
+        const d = await db.details.get(id)
+        const m = await db.mindmaps.get(id)
+        children.push({
+          id,
+          title: node.title,
+          markdown: d?.markdown ?? '',
+          mindmapOutline: outlineFromMindElixir(m?.data),
+        })
+      }
+      const result = await runRollupOrganize({
+        settings,
+        children,
+        prompt,
+      })
+      setPreview({
+        mode: 'rollup',
+        preview: result.preview,
+        mindElixirData: result.mindElixirData,
+        prompt,
+        rollupTitle: result.title,
+        childIds: children.map((c) => c.id),
+      })
+      setStatus(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setStatus(null)
+    } finally {
+      setOrganizing(false)
+    }
+  }, [checkedIds, settings, prompt])
+
   const applyPreview = useCallback(
-    async (opts: { mindmap: boolean; detail: boolean; children: boolean }) => {
-      if (!selected || !preview) return
+    async (opts: { mindmap: boolean; detail: boolean }) => {
+      if (!preview) return
       const now = Date.now()
+
+      if (preview.mode === 'rollup' && preview.childIds?.length) {
+        const all = await db.nodes.toArray()
+        const childIds = preview.childIds
+        assertNoAncestorPairs(all, childIds)
+        const parentOfGroup = commonParentId(all, childIds)
+        const siblings = all.filter((n) => n.parentId === parentOfGroup)
+        const title = preview.rollupTitle || preview.preview.mindmap.topic
+        const parentId = crypto.randomUUID()
+
+        await db.transaction(
+          'rw',
+          db.nodes,
+          db.mindmaps,
+          db.details,
+          async () => {
+            await db.nodes.add({
+              id: parentId,
+              parentId: parentOfGroup,
+              title,
+              sort: siblings.length ? Math.min(...siblings.map((s) => s.sort)) : 0,
+              updatedAt: now,
+            })
+            // 把勾选节点挪到新父节点下，保持相对顺序
+            const ordered = [...childIds].sort((a, b) => {
+              const na = all.find((n) => n.id === a)
+              const nb = all.find((n) => n.id === b)
+              return (na?.sort ?? 0) - (nb?.sort ?? 0)
+            })
+            let i = 0
+            for (const cid of ordered) {
+              await db.nodes.update(cid, {
+                parentId,
+                sort: i++,
+                updatedAt: now,
+              })
+            }
+            if (opts.mindmap) {
+              await db.mindmaps.put({
+                nodeId: parentId,
+                data: preview.mindElixirData,
+                updatedAt: now,
+              })
+            } else {
+              await db.mindmaps.put({
+                nodeId: parentId,
+                data: defaultMindmap(title),
+                updatedAt: now,
+              })
+            }
+            if (opts.detail) {
+              await db.details.put({
+                nodeId: parentId,
+                markdown: normalizeMathMarkdown(preview.preview.markdown),
+                updatedAt: now,
+              })
+            } else {
+              await db.details.put({
+                nodeId: parentId,
+                markdown: `# ${title}\n\n`,
+                updatedAt: now,
+              })
+            }
+          },
+        )
+
+        setPreview(null)
+        setCheckedIds([])
+        setClassifyMode(false)
+        setSelectedId(parentId)
+        setActiveTab(opts.detail ? 'detail' : 'mindmap')
+        return
+      }
+
+      if (!selected) return
       await db.snapshots.add({
         id: crypto.randomUUID(),
         nodeId: selected.id,
@@ -313,16 +460,11 @@ export function useKnowledgeStore() {
           updatedAt: now,
         })
       }
-      if (opts.children && preview.preview.suggestedChildren?.length) {
-        for (const title of preview.preview.suggestedChildren) {
-          await addNode(selected.id, title)
-        }
-      }
       await db.nodes.update(selected.id, { updatedAt: now })
       setPreview(null)
       setActiveTab(opts.detail ? 'detail' : 'mindmap')
     },
-    [selected, preview, mindmap?.data, detail?.markdown, addNode],
+    [selected, preview, mindmap?.data, detail?.markdown],
   )
 
   const exportBackup = useCallback(async () => {
@@ -380,6 +522,12 @@ export function useKnowledgeStore() {
     startOrganize,
     applyPreview,
     exportBackup,
+    classifyMode,
+    toggleClassifyMode,
+    checkedIds,
+    toggleChecked,
+    clearChecked,
+    startRollup,
   }
 }
 

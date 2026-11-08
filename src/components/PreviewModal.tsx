@@ -3,23 +3,33 @@ import type { OrganizePreview } from '../db/types'
 
 interface Props {
   preview: OrganizePreview
+  mode?: 'organize' | 'rollup'
+  parentTitle?: string
   onCancel: () => void
-  onApply: (opts: { mindmap: boolean; detail: boolean; children: boolean }) => void
+  onApply: (opts: { mindmap: boolean; detail: boolean }) => void
 }
 
-export function PreviewModal({ preview, onCancel, onApply }: Props) {
+export function PreviewModal({
+  preview,
+  mode = 'organize',
+  parentTitle,
+  onCancel,
+  onApply,
+}: Props) {
   const [mindmap, setMindmap] = useState(true)
   const [detail, setDetail] = useState(true)
-  const [children, setChildren] = useState(
-    Boolean(preview.suggestedChildren?.length),
-  )
+  const isRollup = mode === 'rollup'
 
   return (
     <div className="modal-backdrop">
       <div className="modal preview-modal">
         <header>
-          <h2>整理预览</h2>
-          <p>确认后再写入。写入前会自动保存当前版本快照。</p>
+          <h2>{isRollup ? '上级节点预览' : '整理预览'}</h2>
+          <p>
+            {isRollup
+              ? `将创建「${parentTitle || preview.mindmap.topic}」，并把勾选节点收拢为其子节点。详情为概况，导图为大块总览。`
+              : '确认后再写入。写入前会自动保存当前版本快照。'}
+          </p>
         </header>
 
         <div className="preview-grid">
@@ -32,12 +42,6 @@ export function PreviewModal({ preview, onCancel, onApply }: Props) {
             <pre className="preview-md">{preview.markdown}</pre>
           </section>
         </div>
-
-        {preview.suggestedChildren?.length ? (
-          <p className="hint">
-            建议子节点：{preview.suggestedChildren.join('、')}
-          </p>
-        ) : null}
 
         <div className="checks">
           <label>
@@ -56,16 +60,6 @@ export function PreviewModal({ preview, onCancel, onApply }: Props) {
             />
             写入详细内容
           </label>
-          {preview.suggestedChildren?.length ? (
-            <label>
-              <input
-                type="checkbox"
-                checked={children}
-                onChange={(e) => setChildren(e.target.checked)}
-              />
-              创建建议子节点
-            </label>
-          ) : null}
         </div>
 
         <footer>
@@ -75,10 +69,10 @@ export function PreviewModal({ preview, onCancel, onApply }: Props) {
           <button
             type="button"
             className="primary"
-            disabled={!mindmap && !detail && !children}
-            onClick={() => onApply({ mindmap, detail, children })}
+            disabled={!mindmap && !detail}
+            onClick={() => onApply({ mindmap, detail })}
           >
-            确认写入
+            {isRollup ? '确认生成上级' : '确认写入'}
           </button>
         </footer>
       </div>

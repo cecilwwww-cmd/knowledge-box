@@ -161,10 +161,10 @@ export async function runOrganize(options: {
 必须只输出一个 JSON 对象，不要解释，格式如下：
 {
   "mindmap": { "topic": "中心主题", "children": [ { "topic": "...", "children": [], "note": "可选短注" } ] },
-  "markdown": "详细内容，使用 Markdown",
-  "suggestedChildren": ["可选的子节点标题"]
+  "markdown": "详细内容，使用 Markdown"
 }
 要求：思维导图层次清晰；详细内容可独立阅读；引用原料时可用「来源N」标记。
+当前节点视为最小知识单元：不要建议或生成更下级子节点，不要输出 suggestedChildren。
 公式必须用 KaTeX 兼容写法：行内 $E=IR$，独立公式用 $$...$$（不要用 [ ] 或 \\[ \\] 包公式）。`
 
   const userContent = await buildUserContent(
@@ -225,7 +225,6 @@ function parseOrganizeResponse(data: {
   const parsed = extractJson(content) as {
     mindmap?: MindmapTreeNode
     markdown?: string
-    suggestedChildren?: string[]
   }
 
   if (!parsed.mindmap?.topic) {
@@ -237,7 +236,6 @@ function parseOrganizeResponse(data: {
     markdown: normalizeMathMarkdown(
       parsed.markdown || `# ${parsed.mindmap.topic}\n`,
     ),
-    suggestedChildren: parsed.suggestedChildren,
   }
 
   return {

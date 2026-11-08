@@ -63,6 +63,13 @@ export default function App() {
         onDelete={(id) => void store.deleteNode(id)}
         onOpenSettings={() => store.setShowSettings(true)}
         onExport={() => void store.exportBackup()}
+        classifyMode={store.classifyMode}
+        checkedIds={store.checkedIds}
+        onToggleClassifyMode={store.toggleClassifyMode}
+        onToggleChecked={store.toggleChecked}
+        onClearChecked={store.clearChecked}
+        onStartRollup={() => void store.startRollup()}
+        rollupBusy={store.organizing}
       />
 
       {sidebarCollapsed ? (
@@ -171,6 +178,8 @@ export default function App() {
       {store.preview ? (
         <PreviewModal
           preview={store.preview.preview}
+          mode={store.preview.mode}
+          parentTitle={store.preview.rollupTitle}
           onCancel={() => store.setPreview(null)}
           onApply={(opts) => void store.applyPreview(opts)}
         />

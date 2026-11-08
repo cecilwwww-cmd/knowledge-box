@@ -54,7 +54,6 @@ export interface AppSettings {
 export interface OrganizePreview {
   mindmap: MindmapTreeNode
   markdown: string
-  suggestedChildren?: string[]
 }
 
 export interface MindmapTreeNode {

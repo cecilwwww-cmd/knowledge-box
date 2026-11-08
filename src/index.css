@@ -223,6 +223,59 @@ body.resizing * {
   background: var(--accent-soft);
 }
 
+.sidebar-actions button.active-tool {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.classify-banner {
+  margin: 0 8px 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.classify-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--line);
+  background: #f3f7f4;
+  font-size: 12px;
+}
+
+.classify-bar .primary {
+  margin-left: auto;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.classify-bar .primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.tree-check {
+  width: 14px;
+  height: 14px;
+  margin: 0 2px 0 4px;
+  flex: 0 0 auto;
+  accent-color: var(--accent);
+}
+
+.tree-row.checked {
+  background: #e4f0ea;
+}
+
 .tree {
   overflow: auto;
   overflow-x: visible;

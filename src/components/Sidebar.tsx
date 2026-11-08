@@ -40,6 +40,13 @@ interface Props {
   onDelete: (id: string) => void
   onOpenSettings: () => void
   onExport: () => void
+  classifyMode: boolean
+  checkedIds: string[]
+  onToggleClassifyMode: () => void
+  onToggleChecked: (id: string) => void
+  onClearChecked: () => void
+  onStartRollup: () => void
+  rollupBusy?: boolean
 }
 
 interface ContextMenuState {
@@ -155,8 +162,13 @@ export function Sidebar(props: Props) {
         </button>
         <div className="sidebar-footer">
           <div className="sidebar-actions sidebar-actions--vertical">
-            <button type="button" title="新建根节点" onClick={() => props.onAdd(null)}>
-              +
+            <button
+              type="button"
+              title="归类：勾选节点后生成上级"
+              className={props.classifyMode ? 'active-tool' : ''}
+              onClick={props.onToggleClassifyMode}
+            >
+              归
             </button>
             <button type="button" title="导出备份" onClick={props.onExport}>
               ⇩
@@ -171,7 +183,7 @@ export function Sidebar(props: Props) {
   }
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${props.classifyMode ? 'classify-on' : ''}`}>
       <div className="sidebar-header">
         <div className="brand">知识箱</div>
         <button
@@ -183,6 +195,11 @@ export function Sidebar(props: Props) {
           «
         </button>
       </div>
+      {props.classifyMode ? (
+        <div className="classify-banner">
+          归类模式：勾选要收拢的节点（≥2），再生成上级
+        </div>
+      ) : null}
       <div className="tree" onContextMenu={(e) => e.preventDefault()}>
         {props.tree.map((node) => (
           <TreeItem
@@ -198,6 +215,10 @@ export function Sidebar(props: Props) {
             onRename={props.onRename}
             onDelete={props.onDelete}
             onContextMenu={openMenu}
+            classifyMode={props.classifyMode}
+            checked={props.checkedIds.includes(node.id)}
+            checkedIds={props.checkedIds}
+            onToggleChecked={props.onToggleChecked}
             onHoverRow={(payload) => {
               if (!payload) {
                 scheduleHideFlyout()
@@ -208,10 +229,31 @@ export function Sidebar(props: Props) {
           />
         ))}
       </div>
+      {props.classifyMode && props.checkedIds.length > 0 ? (
+        <div className="classify-bar">
+          <span>已选 {props.checkedIds.length}</span>
+          <button type="button" onClick={props.onClearChecked}>
+            清空
+          </button>
+          <button
+            type="button"
+            className="primary"
+            disabled={props.checkedIds.length < 2 || props.rollupBusy}
+            onClick={props.onStartRollup}
+          >
+            {props.rollupBusy ? '生成中…' : '生成上级'}
+          </button>
+        </div>
+      ) : null}
       <div className="sidebar-footer">
         <div className="sidebar-actions">
-          <button type="button" title="新建根节点" onClick={() => props.onAdd(null)}>
-            +
+          <button
+            type="button"
+            title="归类：勾选零散节点，往上生成上级"
+            className={props.classifyMode ? 'active-tool' : ''}
+            onClick={props.onToggleClassifyMode}
+          >
+            归
           </button>
           <button type="button" title="导出备份" onClick={props.onExport}>
             ⇩
@@ -359,6 +401,10 @@ function TreeItem({
   onDelete,
   onContextMenu,
   onHoverRow,
+  classifyMode,
+  checked,
+  checkedIds,
+  onToggleChecked,
 }: {
   node: TreeNode
   depth: number
@@ -372,6 +418,10 @@ function TreeItem({
   onDelete: (id: string) => void
   onContextMenu: (node: TreeNode, e: ReactMouseEvent) => void
   onHoverRow: (payload: HoverFlyoutState | null) => void
+  classifyMode: boolean
+  checked: boolean
+  checkedIds: string[]
+  onToggleChecked: (id: string) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const [draft, setDraft] = useState(node.title)
@@ -415,11 +465,21 @@ function TreeItem({
     <div className={`tree-item depth-${depth}`}>
       <div
         ref={rowRef}
-        className={`tree-row ${selectedId === node.id ? 'active' : ''} ${isHover ? 'is-hover' : ''}`}
+        className={`tree-row ${selectedId === node.id ? 'active' : ''} ${isHover ? 'is-hover' : ''} ${checked ? 'checked' : ''}`}
         onMouseEnter={emitHover}
         onMouseLeave={() => onHoverRow(null)}
         onContextMenu={(e) => onContextMenu(node, e)}
       >
+        {classifyMode ? (
+          <input
+            type="checkbox"
+            className="tree-check"
+            checked={checked}
+            onChange={() => onToggleChecked(node.id)}
+            onClick={(e) => e.stopPropagation()}
+            title="勾选以归类"
+          />
+        ) : null}
         {hasChildren ? (
           <button
             type="button"
@@ -476,6 +536,10 @@ function TreeItem({
               onRename={onRename}
               onDelete={onDelete}
               onContextMenu={onContextMenu}
+              classifyMode={classifyMode}
+              checked={checkedIds.includes(child.id)}
+              checkedIds={checkedIds}
+              onToggleChecked={onToggleChecked}
               onHoverRow={onHoverRow}
             />
           ))}
