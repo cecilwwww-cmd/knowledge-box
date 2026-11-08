@@ -473,6 +473,35 @@ body.resizing * {
   font-size: 13px;
 }
 
+.source-vision-hint {
+  background: #eef6f2;
+  border: 1px solid #b7d4c8;
+  color: #245a45;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.source-vision-hint code {
+  font-size: 12px;
+}
+
+.ocr-details {
+  margin-top: 8px;
+}
+
+.ocr-details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  user-select: none;
+}
+
+.ocr-details pre {
+  margin-top: 8px;
+}
+
 .organize-bar {
   display: grid;
   grid-template-columns: 180px 1fr auto;
