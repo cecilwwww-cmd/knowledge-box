@@ -1,7 +1,7 @@
 /** 从剪贴板取出可入库的 File 列表（图片优先，其次纯文本） */
-export async function filesFromClipboard(
+export function filesFromClipboard(
   clipboardData: DataTransfer | null,
-): Promise<File[]> {
+): File[] {
   if (!clipboardData) return []
 
   const out: File[] = []
@@ -55,7 +55,6 @@ export function isEditablePasteTarget(target: EventTarget | null) {
   if (target.isContentEditable) return true
   const tag = target.tagName
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true
-  // Vditor / 富文本
   if (target.closest('.vditor, .vditor-content, [contenteditable="true"]')) {
     return true
   }

@@ -42,12 +42,10 @@ export default function App() {
     if (organizeCollapsed || !store.selectedId) return
     const onPaste = (e: ClipboardEvent) => {
       if (isEditablePasteTarget(e.target)) return
-      void (async () => {
-        const files = await filesFromClipboard(e.clipboardData)
-        if (!files.length) return
-        e.preventDefault()
-        void store.addFiles(files)
-      })()
+      const files = filesFromClipboard(e.clipboardData)
+      if (!files.length) return
+      e.preventDefault()
+      void store.addFiles(files)
     }
     window.addEventListener('paste', onPaste)
     return () => window.removeEventListener('paste', onPaste)

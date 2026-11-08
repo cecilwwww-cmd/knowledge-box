@@ -20,9 +20,9 @@ export function OrganizeBar(props: Props) {
   const [titleMode, setTitleMode] = useState<'ai' | 'manual'>('ai')
   const [manualTitle, setManualTitle] = useState('')
 
-  const ingestPaste = async (e: React.ClipboardEvent | ClipboardEvent) => {
+  const ingestPaste = (e: React.ClipboardEvent) => {
     if (props.disabled) return
-    const files = await filesFromClipboard(e.clipboardData)
+    const files = filesFromClipboard(e.clipboardData)
     if (!files.length) return
     e.preventDefault()
     props.onFiles(files)
@@ -46,9 +46,7 @@ export function OrganizeBar(props: Props) {
           if (e.dataTransfer.files?.length) props.onFiles(e.dataTransfer.files)
         }}
         onClick={() => inputRef.current?.click()}
-        onPaste={(e) => {
-          void ingestPaste(e)
-        }}
+        onPaste={ingestPaste}
       >
         <span>拖入或粘贴图文 / PDF / Word / HTML</span>
         <small className="drop-hint">支持 Ctrl+V 粘贴截图或文字</small>
