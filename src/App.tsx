@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DetailEditor } from './components/DetailEditor'
 import { MindmapEditor } from './components/MindmapEditor'
-import { OrganizeBar } from './components/OrganizeBar'
+import { OrganizeBar, TABS } from './components/OrganizeBar'
 import { PreviewModal } from './components/PreviewModal'
 import { readSidebarWidth, ResizeHandle } from './components/ResizeHandle'
 import { SettingsModal } from './components/SettingsModal'
@@ -75,6 +75,22 @@ export default function App() {
         <header className="workspace-header">
           <div className="breadcrumb-row">
             <div className="breadcrumb">{path || '未选择节点'}</div>
+            {organizeCollapsed ? (
+              <div className="tabs header-tabs" role="tablist">
+                {TABS.map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={store.activeTab === key}
+                    className={store.activeTab === key ? 'active' : ''}
+                    onClick={() => store.setActiveTab(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <button
               type="button"
               className="organize-toggle"
@@ -103,27 +119,10 @@ export default function App() {
             onOrganize={() => void store.startOrganize()}
             organizing={store.organizing || store.parsing}
             disabled={!store.selected || store.parsing}
+            activeTab={store.activeTab}
+            onTabChange={store.setActiveTab}
           />
         ) : null}
-
-        <div className="tabs">
-          {(
-            [
-              ['sources', '原料'],
-              ['mindmap', '思维导图'],
-              ['detail', '详细内容'],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className={store.activeTab === key ? 'active' : ''}
-              onClick={() => store.setActiveTab(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
 
         <div className="workspace-body">
           {!store.selected ? (

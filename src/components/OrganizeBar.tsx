@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react'
 
+type TabKey = 'sources' | 'mindmap' | 'detail'
+
 interface Props {
   prompt: string
   onPromptChange: (v: string) => void
@@ -7,7 +9,15 @@ interface Props {
   onOrganize: () => void
   organizing: boolean
   disabled?: boolean
+  activeTab: TabKey
+  onTabChange: (tab: TabKey) => void
 }
+
+const TABS: Array<[TabKey, string]> = [
+  ['sources', '原料'],
+  ['mindmap', '思维导图'],
+  ['detail', '详细内容'],
+]
 
 export function OrganizeBar(props: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -15,6 +25,21 @@ export function OrganizeBar(props: Props) {
 
   return (
     <div className="organize-bar">
+      <div className="tabs organize-tabs" role="tablist">
+        {TABS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={props.activeTab === key}
+            className={props.activeTab === key ? 'active' : ''}
+            onClick={() => props.onTabChange(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div
         className={`drop-zone ${dragging ? 'dragging' : ''}`}
         onDragOver={(e) => {
@@ -61,3 +86,6 @@ export function OrganizeBar(props: Props) {
     </div>
   )
 }
+
+export { TABS }
+export type { TabKey }
