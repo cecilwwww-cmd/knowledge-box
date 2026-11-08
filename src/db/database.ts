@@ -1,4 +1,5 @@
 import Dexie, { type EntityTable } from 'dexie'
+import { defaultAppSettings } from '../config'
 import type {
   AppSettings,
   DetailDoc,
@@ -96,9 +97,7 @@ export async function ensureSeedData() {
         },
       ])
 
-      await db.settings.put(
-        (await import('../config')).defaultAppSettings(),
-      )
+      await db.settings.put(defaultAppSettings())
     },
   )
 }
