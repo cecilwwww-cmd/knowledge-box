@@ -7,6 +7,7 @@ import { readSidebarWidth, ResizeHandle } from './components/ResizeHandle'
 import { SettingsModal } from './components/SettingsModal'
 import { Sidebar } from './components/Sidebar'
 import { SourcesPanel } from './components/SourcesPanel'
+import { VaultBrowserModal } from './components/VaultBrowserModal'
 import { useKnowledgeStore } from './hooks/useKnowledgeStore'
 import {
   filesFromClipboard,
@@ -25,6 +26,7 @@ export default function App() {
   const [organizeCollapsed, setOrganizeCollapsed] = useState(
     () => localStorage.getItem('knowledge-box-organize-collapsed') === '1',
   )
+  const [vaultRootId, setVaultRootId] = useState<string | null>(null)
 
   useEffect(() => {
     localStorage.setItem(COLLAPSE_KEY, sidebarCollapsed ? '1' : '0')
@@ -89,6 +91,7 @@ export default function App() {
         onClearChecked={store.clearChecked}
         onStartRollup={(opts) => void store.startRollup(opts)}
         rollupBusy={store.organizing}
+        onOpenVault={(rootId) => setVaultRootId(rootId)}
       />
 
       {sidebarCollapsed ? (
@@ -201,6 +204,24 @@ export default function App() {
           nodeTitle={store.preview.nodeTitle}
           onCancel={() => store.setPreview(null)}
           onApply={(opts) => void store.applyPreview(opts)}
+        />
+      ) : null}
+
+      {vaultRootId ? (
+        <VaultBrowserModal
+          rootId={vaultRootId}
+          onClose={() => setVaultRootId(null)}
+          onOpenNode={(id, tab) => {
+            if (tab === 'sources') {
+              store.selectNode(id)
+              store.setActiveTab('sources')
+            } else if (tab) {
+              store.selectNode(id, tab)
+            } else {
+              store.selectNode(id)
+            }
+            setVaultRootId(null)
+          }}
         />
       ) : null}
     </div>
