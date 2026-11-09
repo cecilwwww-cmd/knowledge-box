@@ -22,5 +22,6 @@ export function defaultAppSettings() {
     apiKey: appConfig.apiKey,
     modelName: appConfig.modelName,
     sendImages: appConfig.sendImages,
+    detailTemplate: 'textbook' as const,
   }
 }

@@ -1,4 +1,9 @@
 import type { AppSettings, MindmapTreeNode, OrganizePreview, SourceItem } from '../db/types'
+import {
+  detailTemplatePromptGuide,
+  resolveDetailTemplate,
+} from './detailTemplates'
+import { ensureLeadingH1 } from './ensureLeadingH1'
 import { normalizeMathMarkdown } from './normalizeMathMarkdown'
 
 type ChatContent =
@@ -12,11 +17,15 @@ function treeToMindElixir(tree: MindmapTreeNode) {
   let counter = 0
   const walk = (node: MindmapTreeNode, isRoot = false): Record<string, unknown> => {
     counter += 1
+    const linked = Boolean(node.linkNodeId)
     return {
       id: isRoot ? 'root' : `n-${counter}`,
       topic: node.topic || '未命名',
-      root: isRoot || undefined,
       note: node.note,
+      tags: linked ? [{ text: '导航', className: 'kb-nav-tag' }] : undefined,
+      metadata: node.linkNodeId
+        ? ({ kbNodeId: node.linkNodeId } satisfies { kbNodeId: string })
+        : undefined,
       children: (node.children || []).map((c) => walk(c)),
     }
   }
@@ -166,6 +175,8 @@ export async function runOrganize(options: {
     )
   }
 
+  const detailTpl = resolveDetailTemplate(settings.detailTemplate)
+
   const system = `你是个人知识整理助手。根据用户提供的原料与整理方向，产出结构化结果。
 若消息中附带图片，必须像网页聊天识图一样直接理解图中的文字、公式、坐标系与抽象示意图（如受力、磁场、导轨等），不要声称无法看图；本地 OCR 文本常有错误，以图片为准。
 必须只输出一个 JSON 对象，不要解释，格式如下：
@@ -175,6 +186,7 @@ export async function runOrganize(options: {
   "markdown": "详细内容，使用 Markdown"
 }
 要求：详细内容可独立阅读；引用原料时可用「来源N」标记。
+${detailTemplatePromptGuide(detailTpl)}
 思维导图按「教材逻辑图」组织（非发散气球图）：根主题短；一级分支 3～6 个大块；二级为短标题；三级及以下才写要点短语；topic 尽量短（宁短勿长），层级清楚。
 导图节点里的公式必须用 $E=k\\\\frac{Q}{r^2}$ 这种行内 TeX（前后加美元符），不要写成裸 \\frac 或方括号。
 重要：当前节点是最小知识单元。题干拆解、小问、受力分析等只能写进「详细内容」和「思维导图」，
@@ -264,7 +276,10 @@ function parseOrganizeResponse(
   const preview: OrganizePreview = {
     title,
     mindmap,
-    markdown: normalizeMathMarkdown(parsed.markdown || `# ${title}\n`),
+    markdown: ensureLeadingH1(
+      normalizeMathMarkdown(parsed.markdown || ''),
+      title,
+    ),
   }
 
   return {

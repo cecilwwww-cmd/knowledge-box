@@ -1,0 +1,390 @@
+/* 详情编辑器：工具栏感应 / 全屏 / 阅读模式 / 表格纠正 */
+.detail-editor {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.vditor-host .vditor {
+  position: relative;
+}
+
+/* 顶栏感应条：盖在编辑器上方，负责下拉箭头 */
+.detail-toolbar-rail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.detail-toolbar-rail.is-open {
+  height: 52px;
+  align-items: flex-start;
+  padding-top: 4px;
+  pointer-events: none;
+}
+
+/* 全屏时感应条挂在编辑器内部顶边，保留悬停下拉 */
+.vditor--fullscreen > .detail-toolbar-rail,
+.detail-toolbar-rail.is-fs {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+}
+
+.detail-fs-exit {
+  pointer-events: auto;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 160ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.detail-toolbar-rail:hover .detail-fs-exit,
+.detail-fs-exit.is-shown {
+  opacity: 1;
+}
+
+.detail-fs-exit:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.detail-chrome-chevron {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 20px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: #586069;
+  opacity: 0.4;
+  transition:
+    opacity 140ms ease,
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+  cursor: pointer;
+  box-shadow: 0 1px 6px rgba(20, 28, 24, 0.1);
+}
+
+.detail-toolbar-rail:hover .detail-chrome-chevron {
+  opacity: 1;
+}
+
+/* 工具栏下拉后立刻藏起箭头，避免盖住格式按钮误触 */
+.detail-chrome-chevron.is-hidden {
+  opacity: 0 !important;
+  pointer-events: none;
+}
+
+.detail-chrome-chevron:hover {
+  color: var(--toolbar-icon-hover-color, #4285f4);
+  border-color: var(--accent, #4285f4);
+  background: #fff;
+}
+
+.vditor-host {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.vditor-host .vditor {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  height: 100% !important;
+}
+
+.vditor-host .vditor-toolbar,
+body > .vditor .vditor-toolbar {
+  background: #f7faf6;
+  border-bottom: 1px solid var(--line);
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  border-bottom-width: 0;
+  pointer-events: none;
+  transition:
+    max-height 220ms ease,
+    opacity 160ms ease,
+    border-bottom-width 160ms ease;
+}
+
+.detail-editor.toolbar-visible .vditor-host .vditor-toolbar,
+.vditor.kb-toolbar-visible .vditor-toolbar {
+  max-height: 56px;
+  opacity: 1;
+  overflow: visible;
+  border-bottom-width: 1px;
+  pointer-events: auto;
+}
+
+/* 全屏时把编辑器挂到 body，避免被面板高度/transform 困住导致白屏 */
+.vditor-host .vditor.vditor--fullscreen,
+body > .vditor.vditor--fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  z-index: 10000 !important;
+  background: #fff !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+body > .vditor.vditor--fullscreen .vditor-toolbar {
+  border-radius: 0;
+  flex: 0 0 auto;
+}
+
+body > .vditor.vditor--fullscreen .vditor-content {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.vditor-host .vditor-ir {
+  background: #fff;
+}
+
+.vditor-host .vditor-ir:focus-within {
+  outline: none;
+  box-shadow: none;
+}
+
+/* 阅读/编辑：固定叠在工具栏右上，无外框；不塞进 Vditor，避免被裁掉 */
+.detail-mode-toggle,
+.vditor--fullscreen > .detail-mode-toggle {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--toolbar-icon-color, #586069);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.detail-mode-toggle.is-shown {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.detail-mode-toggle:hover {
+  color: var(--toolbar-icon-hover-color, #4285f4);
+}
+
+/*
+ * 阅读模式：继续用 IR 渲染（避免另开预览层白屏），
+ * 只读 + 隐藏 Markdown 标记（### 等），外观接近成稿。
+ */
+.detail-editor.is-read .vditor-ir,
+.vditor.kb-read-mode .vditor-ir {
+  cursor: default;
+}
+
+.detail-editor.is-read .vditor-ir pre.vditor-reset,
+.vditor.kb-read-mode .vditor-ir pre.vditor-reset {
+  cursor: default;
+  user-select: text;
+  caret-color: transparent;
+}
+
+.detail-editor.is-read .vditor-ir__marker,
+.vditor.kb-read-mode .vditor-ir__marker,
+.detail-editor.is-read .vditor-ir__marker--heading,
+.vditor.kb-read-mode .vditor-ir__marker--heading,
+.detail-editor.is-read .vditor-ir__marker--bi,
+.vditor.kb-read-mode .vditor-ir__marker--bi,
+.detail-editor.is-read .vditor-ir__marker--link,
+.vditor.kb-read-mode .vditor-ir__marker--link,
+.detail-editor.is-read .vditor-ir__marker--title,
+.vditor.kb-read-mode .vditor-ir__marker--title,
+.detail-editor.is-read .vditor-ir__marker--bracket,
+.vditor.kb-read-mode .vditor-ir__marker--bracket,
+.detail-editor.is-read .vditor-ir__marker--paren,
+.vditor.kb-read-mode .vditor-ir__marker--paren,
+.detail-editor.is-read .vditor-ir__marker--info,
+.vditor.kb-read-mode .vditor-ir__marker--info,
+.detail-editor.is-read .vditor-ir__marker--hide,
+.vditor.kb-read-mode .vditor-ir__marker--hide {
+  display: none !important;
+  font-size: 0 !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  max-width: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+.detail-editor .detail-read-preview,
+.vditor .detail-read-preview {
+  display: none !important;
+}
+
+.detail-editor.is-read .vditor-toolbar__item,
+.vditor.kb-read-mode .vditor-toolbar__item {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.detail-editor.is-read .vditor-toolbar__item[data-type='fullscreen'],
+.vditor.kb-read-mode .vditor-toolbar__item[data-type='fullscreen'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 详情编辑器：默认隐藏 Vditor 的 H1/H2… 角标，悬停标题时再显示 */
+.detail-editor .vditor-ir .vditor-reset > h1:before,
+.detail-editor .vditor-ir .vditor-reset > h2:before,
+.detail-editor .vditor-ir .vditor-reset > h3:before,
+.detail-editor .vditor-ir .vditor-reset > h4:before,
+.detail-editor .vditor-ir .vditor-reset > h5:before,
+.detail-editor .vditor-ir .vditor-reset > h6:before {
+  opacity: 0;
+  transition: opacity 140ms ease;
+  pointer-events: none;
+}
+
+.detail-editor .vditor-ir .vditor-reset > h1:hover:before,
+.detail-editor .vditor-ir .vditor-reset > h2:hover:before,
+.detail-editor .vditor-ir .vditor-reset > h3:hover:before,
+.detail-editor .vditor-ir .vditor-reset > h4:hover:before,
+.detail-editor .vditor-ir .vditor-reset > h5:hover:before,
+.detail-editor .vditor-ir .vditor-reset > h6:hover:before {
+  opacity: 0.75;
+}
+
+/*
+ * 引用块：去掉左侧竖条，改成单层圆角矩形。
+ * Vditor 默认用 ::before 画竖线，且内部 p 自带圆角，容易看起来像「框套框」。
+ */
+.detail-editor .vditor-reset blockquote:not(.callout),
+.vditor.kb-tpl-default .vditor-reset blockquote:not(.callout),
+.vditor.kb-tpl-textbook .vditor-reset blockquote:not(.callout),
+.vditor.kb-tpl-paper .vditor-reset blockquote:not(.callout),
+.vditor.kb-tpl-cartoon .vditor-reset blockquote:not(.callout) {
+  position: relative;
+  display: block;
+  margin: 0.85em 0;
+  padding: 0.75em 1em;
+  border: 1px solid #d8dde3;
+  border-radius: 10px;
+  border-left: 1px solid #d8dde3;
+  background: #fafbfc;
+  color: #4a5560;
+  box-shadow: none;
+}
+
+.detail-editor .vditor-reset blockquote:not(.callout)::before,
+.vditor.kb-tpl-default .vditor-reset blockquote:not(.callout)::before,
+.vditor.kb-tpl-textbook .vditor-reset blockquote:not(.callout)::before,
+.vditor.kb-tpl-paper .vditor-reset blockquote:not(.callout)::before,
+.vditor.kb-tpl-cartoon .vditor-reset blockquote:not(.callout)::before {
+  content: none !important;
+  display: none !important;
+}
+
+.detail-editor .vditor-reset blockquote:not(.callout) > p,
+.vditor.kb-tpl-default .vditor-reset blockquote:not(.callout) > p,
+.vditor.kb-tpl-textbook .vditor-reset blockquote:not(.callout) > p,
+.vditor.kb-tpl-paper .vditor-reset blockquote:not(.callout) > p,
+.vditor.kb-tpl-cartoon .vditor-reset blockquote:not(.callout) > p {
+  margin: 0.25em 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.detail-editor .vditor-reset blockquote:not(.callout) > :first-child,
+.vditor.kb-tpl-default .vditor-reset blockquote:not(.callout) > :first-child,
+.vditor.kb-tpl-textbook .vditor-reset blockquote:not(.callout) > :first-child,
+.vditor.kb-tpl-paper .vditor-reset blockquote:not(.callout) > :first-child,
+.vditor.kb-tpl-cartoon .vditor-reset blockquote:not(.callout) > :first-child {
+  margin-top: 0;
+}
+
+.detail-editor .vditor-reset blockquote:not(.callout) > :last-child,
+.vditor.kb-tpl-default .vditor-reset blockquote:not(.callout) > :last-child,
+.vditor.kb-tpl-textbook .vditor-reset blockquote:not(.callout) > :last-child,
+.vditor.kb-tpl-paper .vditor-reset blockquote:not(.callout) > :last-child,
+.vditor.kb-tpl-cartoon .vditor-reset blockquote:not(.callout) > :last-child {
+  margin-bottom: 0;
+}
+
+/* 纠正 Vditor table { display:block } 导致的「格子挤左、右侧空白」 */
+.detail-editor .vditor-reset table {
+  display: table !important;
+  width: 100% !important;
+  table-layout: fixed;
+  border-collapse: collapse;
+  overflow: visible;
+}
+
+.detail-editor .vditor-reset table thead {
+  display: table-header-group !important;
+}
+
+.detail-editor .vditor-reset table tbody {
+  display: table-row-group !important;
+}
+
+.detail-editor .vditor-reset table tr {
+  display: table-row !important;
+}
+
+.detail-editor .vditor-reset table td,
+.detail-editor .vditor-reset table th {
+  display: table-cell !important;
+  white-space: normal !important;
+  word-break: break-word;
+}
+

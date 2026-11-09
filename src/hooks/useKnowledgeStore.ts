@@ -9,6 +9,7 @@ import type {
   SourceItem,
 } from '../db/types'
 import { extractFromFile } from '../lib/extractText'
+import { ensureLeadingH1 } from '../lib/ensureLeadingH1'
 import { normalizeMathMarkdown } from '../lib/normalizeMathMarkdown'
 import { runOrganize } from '../lib/organize'
 import {
@@ -47,7 +48,13 @@ export function useKnowledgeStore() {
       .then(async () => {
         // 部署时写入的管理员 DeepSeek 配置：覆盖本机旧设置，保证终端用户共用识图模型
         if (appConfig.lockApiSettings || appConfig.apiKey) {
-          await db.settings.put(defaultAppSettings())
+          const cur = await db.settings.get('main')
+          const baked = defaultAppSettings()
+          await db.settings.put({
+            ...baked,
+            // 保留用户选的排版模板，只锁定/注入 API 配置
+            detailTemplate: cur?.detailTemplate ?? baked.detailTemplate,
+          })
         } else {
           const cur = await db.settings.get('main')
           if (cur && /deepseek-chat|deepseek-reasoner/i.test(cur.modelName)) {
@@ -76,6 +83,9 @@ export function useKnowledgeStore() {
       ? {
           ...storedSettings,
           ...defaultAppSettings(),
+          detailTemplate:
+            storedSettings.detailTemplate ??
+            defaultAppSettings().detailTemplate,
         }
       : storedSettings
 
@@ -205,6 +215,70 @@ export function useKnowledgeStore() {
     [selectedId],
   )
 
+  /**
+   * 取消归类：解散本级父节点，子节点上移到原父级位置，不删除子节点内容。
+   */
+  const cancelRollup = useCallback(
+    async (id: string) => {
+      const all = await db.nodes.toArray()
+      const node = all.find((n) => n.id === id)
+      if (!node) return
+      const kids = all
+        .filter((n) => n.parentId === id)
+        .sort((a, b) => a.sort - b.sort || a.title.localeCompare(b.title))
+      if (!kids.length) {
+        setError('该节点没有子节点，无法取消归类')
+        return
+      }
+
+      const grandparentId = node.parentId
+      const siblings = all
+        .filter((n) => n.parentId === grandparentId && n.id !== id)
+        .sort((a, b) => a.sort - b.sort || a.title.localeCompare(b.title))
+
+      // 用子节点替换本节点在同级中的位置
+      const insertAt = (() => {
+        const before = siblings.filter((s) => s.sort < node.sort).length
+        return before
+      })()
+      const reordered = [
+        ...siblings.slice(0, insertAt),
+        ...kids,
+        ...siblings.slice(insertAt),
+      ]
+      const now = Date.now()
+
+      await db.transaction(
+        'rw',
+        db.nodes,
+        db.sources,
+        db.mindmaps,
+        db.details,
+        db.snapshots,
+        async () => {
+          for (let i = 0; i < reordered.length; i++) {
+            const n = reordered[i]
+            await db.nodes.update(n.id, {
+              parentId: grandparentId,
+              sort: i,
+              updatedAt: now,
+            })
+          }
+          await db.nodes.delete(id)
+          await db.sources.where('nodeId').equals(id).delete()
+          await db.mindmaps.delete(id)
+          await db.details.delete(id)
+          await db.snapshots.where('nodeId').equals(id).delete()
+        },
+      )
+
+      if (selectedId === id) {
+        setSelectedId(kids[0]?.id ?? grandparentId)
+      }
+    },
+    [selectedId],
+  )
+
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       if (!selectedId) return
@@ -259,6 +333,15 @@ export function useKnowledgeStore() {
     })
     await db.nodes.update(selectedId, { updatedAt: Date.now() })
   }, [selectedId])
+
+  const saveDetailFor = useCallback(async (nodeId: string, markdown: string) => {
+    await db.details.put({
+      nodeId,
+      markdown: normalizeMathMarkdown(markdown),
+      updatedAt: Date.now(),
+    })
+    await db.nodes.update(nodeId, { updatedAt: Date.now() })
+  }, [])
 
   const saveMindmap = useCallback(
     async (data: unknown) => {
@@ -456,6 +539,7 @@ export function useKnowledgeStore() {
               title,
               sort: siblings.length ? Math.min(...siblings.map((s) => s.sort)) : 0,
               updatedAt: now,
+              origin: 'rollup',
             })
             // 把勾选节点挪到新父节点下，保持相对顺序
             const ordered = [...childIds].sort((a, b) => {
@@ -479,7 +563,10 @@ export function useKnowledgeStore() {
             if (opts.detail) {
               await db.details.put({
                 nodeId: parentId,
-                markdown: normalizeMathMarkdown(preview.preview.markdown),
+                markdown: ensureLeadingH1(
+                  normalizeMathMarkdown(preview.preview.markdown),
+                  title,
+                ),
                 updatedAt: now,
               })
             } else {
@@ -526,7 +613,10 @@ export function useKnowledgeStore() {
       if (opts.detail) {
         await db.details.put({
           nodeId: selected.id,
-          markdown: normalizeMathMarkdown(preview.preview.markdown),
+          markdown: ensureLeadingH1(
+            normalizeMathMarkdown(preview.preview.markdown),
+            title,
+          ),
           updatedAt: now,
         })
       }
@@ -586,9 +676,11 @@ export function useKnowledgeStore() {
     renameNode,
     deleteNode,
     deleteChildNodes,
+    cancelRollup,
     addFiles,
     removeSource,
     saveDetail,
+    saveDetailFor,
     saveMindmap,
     startOrganize,
     applyPreview,

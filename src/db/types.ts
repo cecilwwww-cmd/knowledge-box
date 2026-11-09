@@ -6,6 +6,8 @@ export interface KnowledgeNode {
   title: string
   sort: number
   updatedAt: number
+  /** 由「归」生成的上级节点，可取消归类而不删子节点 */
+  origin?: 'rollup'
 }
 
 export interface SourceItem {
@@ -42,6 +44,8 @@ export interface Snapshot {
   createdAt: number
 }
 
+export type DetailTemplateId = 'default' | 'textbook' | 'paper' | 'cartoon'
+
 export interface AppSettings {
   id: 'main'
   apiBaseUrl: string
@@ -49,6 +53,8 @@ export interface AppSettings {
   modelName: string
   /** 像对话框一样把原图发给模型（需多模态 / 识图模型） */
   sendImages?: boolean
+  /** 详细内容排版模板；AI 总结会沿用对应结构 */
+  detailTemplate?: DetailTemplateId
 }
 
 export interface OrganizePreview {
@@ -62,4 +68,6 @@ export interface MindmapTreeNode {
   topic: string
   children?: MindmapTreeNode[]
   note?: string
+  /** AI 生成的导航：点击导图节点后跳到该知识树子节点的详细内容 */
+  linkNodeId?: string
 }

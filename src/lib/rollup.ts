@@ -1,4 +1,10 @@
 import type { AppSettings, MindmapTreeNode, OrganizePreview } from '../db/types'
+import {
+  detailTemplatePromptGuide,
+  resolveDetailTemplate,
+} from './detailTemplates'
+import { ensureLeadingH1 } from './ensureLeadingH1'
+import { ensureChildNavLinks } from './mindmapLink'
 import { normalizeMathMarkdown } from './normalizeMathMarkdown'
 import { treeToMindElixir } from './organize'
 
@@ -53,43 +59,57 @@ export async function runRollupOrganize(options: {
   if (children.length < 2) {
     throw new Error('请至少勾选 2 个节点再生成上级')
   }
-  if (children.length > 12) {
-    throw new Error('一次最多归类 12 个节点，请分批收拢')
-  }
   const manualTitle = fixedTitle?.trim()
   if (fixedTitle !== undefined && !manualTitle) {
     throw new Error('请填写上级节点标题')
   }
 
+  // 节点多时自动缩短单节点摘要，避免撑爆上下文；不限制勾选数量
+  const mdBudget = Math.max(280, Math.min(1200, Math.floor(18000 / children.length)))
+  const outlineBudget = Math.max(160, Math.min(800, Math.floor(10000 / children.length)))
+
   const childBlock = children
     .map((c, i) => {
-      const md = c.markdown.replace(/\s+/g, ' ').trim().slice(0, 1200)
-      return `### 子节点 ${i + 1}: ${c.title}
+      const md = c.markdown.replace(/\s+/g, ' ').trim().slice(0, mdBudget)
+      return `### 子节点 ${i + 1}
+id: ${c.id}
+title: ${c.title}
 导图大纲：
-${c.mindmapOutline.slice(0, 800)}
+${c.mindmapOutline.slice(0, outlineBudget)}
 详情摘要：
 ${md || '（暂无详情）'}`
     })
     .join('\n\n')
+
+  const detailTpl = resolveDetailTemplate(settings.detailTemplate)
 
   const system = `你是个人知识库的「自下而上」归类助手。
 用户勾选了若干最小知识节点，需要往上生成一个父节点来收拢它们。
 必须只输出一个 JSON 对象：
 {
   "title": "父节点标题（简洁，像目录名）",
-  "mindmap": { "topic": "与 title 一致或更完整的中心主题", "children": [ { "topic": "...", "children": [], "note": "可选" } ] },
+  "mindmap": {
+    "topic": "中心主题",
+    "children": [
+      { "topic": "大块标题", "children": [
+        { "topic": "导航点", "linkNodeId": "子节点id", "children": [] }
+      ]}
+    ]
+  },
   "markdown": "父节点详细内容（Markdown）"
 }
 硬性要求：
 1. markdown 是对子节点的概况归纳：主题脉络、共性、对照要点；禁止复制粘贴子节点全文。
-2. mindmap 按教材逻辑图：一级 3～6 个大块短标题，二级再概括，勿把子节点细枝末节全摊上来。
-3. 公式用 $...$ 或 $$...$$，不要用方括号包公式。
-4. 不要输出 suggestedChildren，不要建议再往下拆子节点。
-${manualTitle ? `5. 用户已指定父节点标题为「${manualTitle}」：JSON 的 title 与 mindmap.topic 必须使用该标题（可在 topic 上轻微补全，但目录名以用户标题为准）。` : '5. 请根据子节点内容总结一个简洁准确的父节点标题。'}`
+${detailTemplatePromptGuide(detailTpl)}
+2. mindmap 按教材逻辑图：一级若干大块短标题；不是每个分支都要导航，但每一个子节点都必须至少出现一次 linkNodeId（值必须是材料里给出的 id）。
+3. linkNodeId 只能填子节点 id，不要填标题；无导航的概括分支可以不写 linkNodeId。
+4. 公式用 $...$ 或 $$...$$，不要用方括号包公式。
+5. 不要输出 suggestedChildren，不要建议再往下拆子节点。
+${manualTitle ? `6. 用户已指定父节点标题为「${manualTitle}」：JSON 的 title 与 mindmap.topic 必须使用该标题。` : '6. 请根据子节点内容总结一个简洁准确的父节点标题。'}`
 
-  const user = `整理方向：${prompt || '把勾选的零散知识收成上一层目录，并写概况与总览导图。'}
+  const user = `整理方向：${prompt || '把勾选的零散知识收成上一层目录，写概况与总览导图，并为每个子节点生成导图导航联动。'}
 ${manualTitle ? `用户指定标题：${manualTitle}\n` : '标题模式：由你总结命名。\n'}
-以下是子节点材料：
+以下是子节点材料（linkNodeId 必须使用其中的 id）：
 ${childBlock}`
 
   const base = settings.apiBaseUrl.replace(/\/$/, '')
@@ -136,9 +156,18 @@ ${childBlock}`
     parsed.mindmap.topic = title
   }
 
+  const linkedMindmap = ensureChildNavLinks(
+    parsed.mindmap,
+    children.map((c) => ({ id: c.id, title: c.title })),
+  )
+
   const preview: OrganizePreview = {
-    mindmap: parsed.mindmap,
-    markdown: normalizeMathMarkdown(parsed.markdown || `# ${title}\n\n`),
+    title,
+    mindmap: linkedMindmap,
+    markdown: ensureLeadingH1(
+      normalizeMathMarkdown(parsed.markdown || ''),
+      title,
+    ),
   }
 
   return {

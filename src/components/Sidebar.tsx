@@ -39,6 +39,7 @@ interface Props {
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
   onDeleteChildren: (id: string) => void
+  onCancelRollup: (id: string) => void
   onOpenSettings: () => void
   onExport: () => void
   classifyMode: boolean
@@ -57,6 +58,8 @@ interface Props {
 interface ContextMenuState {
   nodeId: string
   title: string
+  hasChildren: boolean
+  isRollup: boolean
   x: number
   y: number
 }
@@ -149,11 +152,18 @@ export function Sidebar(props: Props) {
     setFlyoutVisible(false)
 
     const pad = 8
-    const approxW = 180
-    const approxH = 220
+    const approxW = 200
+    const approxH = 260
     const x = Math.min(e.clientX, window.innerWidth - approxW - pad)
     const y = Math.min(e.clientY, window.innerHeight - approxH - pad)
-    setMenu({ nodeId: node.id, title: node.title, x, y })
+    setMenu({
+      nodeId: node.id,
+      title: node.title,
+      hasChildren: node.children.length > 0,
+      isRollup: node.origin === 'rollup',
+      x,
+      y,
+    })
   }
 
   if (props.collapsed) {
@@ -371,6 +381,24 @@ export function Sidebar(props: Props) {
             </button>
           ) : null}
           <div className="context-sep" />
+          {menu.hasChildren ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                if (
+                  confirm(
+                    `取消归类「${menu.title}」？\n将解散本级，子节点保留并回到上一层；不会删除子节点内容。`,
+                  )
+                ) {
+                  props.onCancelRollup(menu.nodeId)
+                }
+                setMenu(null)
+              }}
+            >
+              {menu.isRollup ? '取消归类' : '取消归类（解散本级）'}
+            </button>
+          ) : null}
           <button
             type="button"
             role="menuitem"
@@ -388,13 +416,13 @@ export function Sidebar(props: Props) {
             role="menuitem"
             className="danger"
             onClick={() => {
-              if (confirm(`删除「${menu.title}」及其子节点？`)) {
+              if (confirm(`删除「${menu.title}」及其全部子节点？此操作不可恢复。`)) {
                 props.onDelete(menu.nodeId)
               }
               setMenu(null)
             }}
           >
-            删除
+            删除（含全部子节点）
           </button>
         </div>
       ) : null}

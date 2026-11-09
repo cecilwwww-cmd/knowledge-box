@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { DetailEditor } from './components/DetailEditor'
+import { DetailEditor } from './components/detail'
 import { MindmapWorkspace } from './components/MindmapWorkspace'
 import { OrganizeBar } from './components/OrganizeBar'
 import { PreviewModal } from './components/PreviewModal'
@@ -82,6 +82,7 @@ export default function App() {
         onRename={(id, title) => void store.renameNode(id, title)}
         onDelete={(id) => void store.deleteNode(id)}
         onDeleteChildren={(id) => void store.deleteChildNodes(id)}
+        onCancelRollup={(id) => void store.cancelRollup(id)}
         onOpenSettings={() => store.setShowSettings(true)}
         onExport={() => void store.exportBackup()}
         classifyMode={store.classifyMode}
@@ -168,14 +169,20 @@ export default function App() {
           ) : store.activeTab === 'mindmap' ? (
             <MindmapWorkspace
               nodeId={store.selected.id}
+              nodeTitle={store.selected.title}
               data={store.mindmap?.data}
+              markdown={store.detail?.markdown ?? ''}
               sources={store.sources}
+              detailTemplate={store.settings.detailTemplate}
               onChange={(data) => void store.saveMindmap(data)}
+              onSaveDetail={(id, md) => void store.saveDetailFor(id, md)}
+              onOpenNode={(id) => store.selectNode(id, 'detail')}
             />
           ) : (
             <DetailEditor
               key={store.selected.id}
               markdown={store.detail?.markdown ?? ''}
+              template={store.settings.detailTemplate}
               onChange={(md) => void store.saveDetail(md)}
             />
           )}
