@@ -368,18 +368,16 @@ export function Sidebar(props: Props) {
           >
             打开详细内容
           </button>
-          {props.tree.some((n) => n.id === menu.nodeId) ? (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                props.onOpenVault(menu.nodeId)
-                setMenu(null)
-              }}
-            >
-              查看资料目录
-            </button>
-          ) : null}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              props.onOpenVault(menu.nodeId)
+              setMenu(null)
+            }}
+          >
+            查看资料目录
+          </button>
           <div className="context-sep" />
           {menu.hasChildren ? (
             <button
