@@ -98,7 +98,8 @@ export function useKnowledgeStore() {
     useLiveQuery(
       () =>
         selectedId
-          ? db.sources.where('nodeId').equals(selectedId).toArray()
+          ? db.sources.where('nodeId').equals(selectedId)
+            .filter((source) => source.usage !== 'detail-image').toArray()
           : Promise.resolve([] as SourceItem[]),
       [selectedId],
     ) ?? []
@@ -379,6 +380,7 @@ export function useKnowledgeStore() {
         const currentSources = await db.sources
           .where('nodeId')
           .equals(selected.id)
+          .filter((source) => source.usage !== 'detail-image')
           .toArray()
         if (!currentSources.length) {
           throw new Error(

@@ -181,6 +181,7 @@ export default function App() {
           ) : (
             <DetailEditor
               key={store.selected.id}
+              nodeId={store.selected.id}
               markdown={store.detail?.markdown ?? ''}
               template={store.settings.detailTemplate}
               onChange={(md) => void store.saveDetail(md)}

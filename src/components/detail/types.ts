@@ -3,6 +3,7 @@ import type { DetailTemplateId } from '../../db/types'
 export type DetailMode = 'read' | 'edit'
 
 export type DetailEditorProps = {
+  nodeId: string
   markdown: string
   onChange: (markdown: string) => void
   template?: DetailTemplateId | string

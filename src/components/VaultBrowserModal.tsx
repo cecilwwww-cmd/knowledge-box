@@ -15,6 +15,26 @@ type VaultEntry = {
   sources: SourceItem[]
 }
 
+const FILE_GROUPS = [
+  { title: '图片', contains: (source: SourceItem) => source.kind === 'image' || source.mimeType.startsWith('image/') },
+  { title: '文档', contains: (source: SourceItem) => ['pdf', 'word', 'html', 'text'].includes(source.kind ?? '') },
+]
+
+function groupFiles(sources: SourceItem[]) {
+  const groups = new Map<string, SourceItem[]>()
+  for (const source of sources) {
+    const title = FILE_GROUPS.find((group) => group.contains(source))?.title ?? '其他文件'
+    const files = groups.get(title) ?? []
+    files.push(source)
+    groups.set(title, files)
+  }
+  return [...FILE_GROUPS.map(({ title }) => title), '其他文件']
+    .flatMap((title) => {
+      const files = groups.get(title)
+      return files?.length ? [{ title, files }] : []
+    })
+}
+
 function buildVault(
   nodes: KnowledgeNode[],
   sources: SourceItem[],
@@ -109,7 +129,7 @@ export function VaultBrowserModal({ rootId, onClose, onOpenNode }: Props) {
         <header>
           <h2>资料目录 · {vault.node.title}</h2>
           <p>
-            文件夹与层级随左侧知识树实时同步；每一层名称即对应节点标题。叶子节点下是该节点上传的原料文件。
+            资料按节点和文件类型整理。粘贴到详情正文的图片保存在对应节点的「图片」文件夹中。
           </p>
         </header>
 
@@ -135,7 +155,10 @@ export function VaultBrowserModal({ rootId, onClose, onOpenNode }: Props) {
                   <span>{activeSource.kind || activeSource.mimeType}</span>
                 </div>
                 {activeSource.dataUrl && activeSource.kind === 'image' ? (
-                  <img src={activeSource.dataUrl} alt={activeSource.name} />
+                  <>
+                    <img src={activeSource.dataUrl} alt={activeSource.name} />
+                    <a href={activeSource.dataUrl} download={activeSource.name}>下载图片</a>
+                  </>
                 ) : (
                   <pre>{activeSource.textContent.slice(0, 4000)}</pre>
                 )}
@@ -230,42 +253,45 @@ function VaultFolder({
               nameUsed={new Set()}
             />
           ))}
-          {entry.sources.map((s, i) => {
-            // 展示名跟节点标题走；多文件时加序号。右侧 meta 保留原始上传名
-            const ext =
-              s.name.includes('.')
-                ? s.name.slice(s.name.lastIndexOf('.'))
-                : s.kind === 'image'
-                  ? '.png'
-                  : '.txt'
-            const label =
-              entry.sources.length === 1
-                ? `${folderName}${ext}`
-                : `${folderName}-${i + 1}${ext}`
-            return (
-              <div
-                key={s.id}
-                className={`vault-row vault-file ${activeSourceId === s.id ? 'active' : ''}`}
-                style={{ paddingLeft: 22 }}
-              >
-                <span className="vault-twist vault-twist-spacer" />
-                <span
-                  className={`vault-icon is-file ${s.kind === 'image' ? 'is-image' : ''}`}
-                  aria-hidden
-                >
-                  件
-                </span>
-                <button
-                  type="button"
-                  className="vault-name"
-                  onClick={() => onPickSource(s)}
-                >
-                  {label}
-                </button>
-                <span className="vault-meta">{s.name}</span>
-              </div>
-            )
-          })}
+          {groupFiles(entry.sources).map(({ title, files }) => (
+            <details className="vault-category" key={title}>
+              <summary className="vault-row">
+                <span className="vault-twist" aria-hidden />
+                <span className="vault-icon" aria-hidden>夹</span>
+                <span>{title}</span>
+                <span className="vault-meta">{files.length} 文件</span>
+              </summary>
+              {files.map((source, index) => {
+                const ext = /\.[^.]+$/.exec(source.name)?.[0] ||
+                  (source.kind === 'image' ? '.png' : '.txt')
+                const label = files.length === 1
+                  ? `${folderName}${ext}`
+                  : `${folderName}-${index + 1}${ext}`
+                return (
+                  <div
+                    key={source.id}
+                    className={`vault-row vault-file ${activeSourceId === source.id ? 'active' : ''}`}
+                  >
+                    <span className="vault-twist vault-twist-spacer" />
+                    <span
+                      className={`vault-icon is-file ${source.kind === 'image' ? 'is-image' : ''}`}
+                      aria-hidden
+                    >
+                      件
+                    </span>
+                    <button
+                      type="button"
+                      className="vault-name"
+                      onClick={() => onPickSource(source)}
+                    >
+                      {label}
+                    </button>
+                    <span className="vault-meta">{source.name}</span>
+                  </div>
+                )
+              })}
+            </details>
+          ))}
         </div>
       ) : null}
     </div>

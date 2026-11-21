@@ -9,6 +9,7 @@ import { useDetailVditor } from './useDetailVditor'
 export type { DetailEditorProps, DetailMode } from './types'
 
 export function DetailEditor({
+  nodeId,
   markdown,
   onChange,
   template,
@@ -17,6 +18,7 @@ export function DetailEditor({
   const [mode, setMode] = useState<DetailMode>('edit')
   const { hostRef, toolbarControls, isFullscreen, exitFullscreen } =
     useDetailVditor({
+      nodeId,
       markdown,
       onChange,
       template: tpl,
