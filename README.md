@@ -33,3 +33,7 @@ npm run dev
 ## 技术栈
 
 Vite · React · TypeScript · Dexie · Vditor · Mind-elixir · Tailwind CSS
+
+## 下载统计
+
+在[下载统计页](https://cecilwwww-cmd.github.io/knowledge-box/admin/)查看 GitHub Releases 的 Windows 安装包下载次数。

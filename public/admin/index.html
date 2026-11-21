@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://api.github.com; base-uri 'none'; form-action 'none'">
+  <title>下载统计 · 知识箱</title>
+  <link rel="stylesheet" href="./dashboard.css">
+  <script src="./dashboard.js" type="module"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="container top-content">
+      <span class="brand"><span class="brand-mark" aria-hidden="true">知</span> 知识箱</span>
+      <a href="../">打开知识箱</a>
+    </div>
+  </header>
+  <main class="container">
+    <div class="intro">
+      <div><h1>下载统计</h1><p>查看 Windows 安装包的累计下载量和各版本明细。</p></div>
+      <button id="refresh" type="button">刷新数据</button>
+    </div>
+
+    <section aria-labelledby="download-title" class="panel">
+      <div class="panel-head">
+        <div><h2 id="download-title">安装包下载</h2><p>数据来自 GitHub Releases，包含重复下载和应用内更新，与实际使用人数不同。</p></div>
+        <a href="https://github.com/cecilwwww-cmd/knowledge-box/releases">查看发布记录</a>
+      </div>
+      <div class="cards" aria-label="下载概览">
+        <div class="metric"><span>累计下载次数</span><strong id="downloads-total">—</strong></div>
+        <div class="metric"><span>最新版本下载次数 <small id="version"></small></span><strong id="downloads-latest">—</strong></div>
+        <div class="metric"><span>已发布版本</span><strong id="release-count">—</strong></div>
+      </div>
+      <p id="download-status" class="status" role="status">正在读取 GitHub 数据…</p>
+      <div class="table-wrap" id="downloads" hidden></div>
+    </section>
+
+  </main>
+</body>
+</html>
