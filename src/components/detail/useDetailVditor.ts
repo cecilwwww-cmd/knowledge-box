@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import Vditor from 'vditor'
+import {
+  detailImageRef,
+  isDetailImageFile,
+  migrateEmbeddedDetailImages,
+  mountDetailImages,
+  saveDetailImages,
+} from '../../db/detailImages'
 import type { DetailTemplateId } from '../../db/types'
+import { filesFromClipboard } from '../../lib/clipboardFiles'
 import { normalizeMathMarkdown } from '../../lib/normalizeMathMarkdown'
 import type { DetailMode } from './types'
 import {
@@ -11,6 +19,7 @@ import {
 import { applyRootChrome, exitFullscreen } from './vditorDom'
 
 type Options = {
+  nodeId: string
   markdown: string
   onChange: (markdown: string) => void
   template: DetailTemplateId
@@ -22,6 +31,7 @@ type Options = {
  * UI（箭头 / 阅读按钮）不放这里，方便后续继续叠功能。
  */
 export function useDetailVditor({
+  nodeId,
   markdown,
   onChange,
   template,
@@ -31,10 +41,12 @@ export function useDetailVditor({
   const editorRef = useRef<Vditor | null>(null)
   const vditorElRef = useRef<HTMLElement | null>(null)
   const onChangeRef = useRef(onChange)
+  const markdownRef = useRef(markdown)
   const modeRef = useRef(mode)
   const templateRef = useRef(template)
 
   onChangeRef.current = onChange
+  markdownRef.current = markdown
   modeRef.current = mode
   templateRef.current = template
 
@@ -57,6 +69,7 @@ export function useDetailVditor({
     vditorElRef.current = root
     let cancelled = false
     let observer: MutationObserver | null = null
+    let disposeImages: (() => void) | undefined
     let fullscreen = false
     let previousOverflow = ''
     const initial = normalizeMathMarkdown(markdown)
@@ -83,6 +96,7 @@ export function useDetailVditor({
       ...(window.location.protocol === 'kb:' && { cdn: 'kb://local/vendor/vditor' }),
       toolbar: [...VDITOR_TOOLBAR],
       preview: VDITOR_PREVIEW,
+      upload: { multiple: true, handler: handleImages },
       after: () => {
         if (cancelled) {
           editor.destroy()
@@ -90,6 +104,7 @@ export function useDetailVditor({
         }
         editorRef.current = editor
         syncChrome(root)
+        disposeImages = mountDetailImages(root)
         const toolbar = root.querySelector('.vditor-toolbar')
         if (toolbar) {
           const frame = document.createElement('div')
@@ -106,7 +121,10 @@ export function useDetailVditor({
           attributes: true,
           attributeFilter: ['class'],
         })
-        if (initial !== markdown) onChangeRef.current(initial)
+        const current = markdownRef.current
+        const next = normalizeMathMarkdown(current)
+        if (editor.getValue() !== next) editor.setValue(next, true)
+        if (next !== current) onChangeRef.current(next)
       },
       input: (value) => {
         if (modeRef.current === 'read') return
@@ -117,6 +135,53 @@ export function useDetailVditor({
         onChangeRef.current(editor.getValue())
       },
     })
+
+    const isReadMode = () => modeRef.current === 'read'
+
+    async function insertImages(files: File[]) {
+      if (isReadMode()) return
+      const selection = window.getSelection()
+      const range = selection?.rangeCount && root.contains(selection.anchorNode)
+        ? selection.getRangeAt(0).cloneRange()
+        : undefined
+      try {
+        const images = await saveDetailImages(nodeId, files)
+        if (!images.length) return '请选择浏览器支持的图片文件。'
+        if (cancelled || isReadMode()) return
+        if (range && root.contains(range.commonAncestorContainer)) {
+          selection?.removeAllRanges()
+          selection?.addRange(range)
+        }
+        editor.insertMD(images.map(({ id, name }) =>
+          `![${name.replace(/[\\[\]\r\n]/g, ' ')}](${detailImageRef(id)})`,
+        ).join('\n\n'))
+        onChangeRef.current(editor.getValue())
+      } catch {
+        return '图片未能保存，请重试。'
+      }
+    }
+
+    async function handleImages(files: File[]): Promise<null> {
+      const error = await insertImages(files)
+      if (error && !cancelled) editor.tip(error)
+      return null
+    }
+
+    const interceptImagePaste = (event: ClipboardEvent) => {
+      const target = event.target
+      if (modeRef.current === 'read' || !(target instanceof HTMLElement) || !target.isContentEditable) return
+      const clipboard = event.clipboardData
+      if (!clipboard) return
+      const plain = clipboard.getData('text/plain').trim()
+      // Leave rich text with surrounding words to the normal Markdown paste.
+      if (clipboard.getData('text/html') && plain && !/^https?:\/\/\S+$/.test(plain)) return
+      const files = filesFromClipboard(clipboard).filter(isDetailImageFile)
+      if (!files.length) return
+      event.preventDefault()
+      event.stopPropagation()
+      void handleImages(files)
+    }
+    root.addEventListener('paste', interceptImagePaste, true)
 
     const rememberOverflow = (event: Event) => {
       if (
@@ -133,6 +198,7 @@ export function useDetailVditor({
     return () => {
       cancelled = true
       observer?.disconnect()
+      disposeImages?.()
       if (fullscreen) document.body.style.overflow = previousOverflow
       root.remove()
       editorRef.current = null
@@ -145,6 +211,10 @@ export function useDetailVditor({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    void migrateEmbeddedDetailImages(nodeId, markdown).catch(console.error)
+  }, [nodeId, markdown])
 
   useEffect(() => {
     const editor = editorRef.current

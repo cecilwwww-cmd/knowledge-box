@@ -202,12 +202,17 @@ export function MindmapWorkspace({
         }`}
       >
         <div className="mind-split-pane pane-mind">
-          <MindmapEditor
-            key={nodeId}
-            data={data}
-            onChange={onChange}
-            onSelectNode={handleSelect}
-          />
+          <div className={`mind-pane ${splitOpen ? 'detail-pane' : ''}`}>
+            {splitOpen && (
+              <header className="detail-pane-head"><strong>思维导图</strong></header>
+            )}
+            <MindmapEditor
+              key={nodeId}
+              data={data}
+              onChange={onChange}
+              onSelectNode={handleSelect}
+            />
+          </div>
         </div>
         {splitOpen ? (
           <div className="mind-split-pane pane-detail is-visible">
@@ -227,6 +232,7 @@ export function MindmapWorkspace({
                   </header>
                   <DetailEditor
                     key={viewNodeId}
+                    nodeId={viewNodeId}
                     markdown={paneMarkdown}
                     template={detailTemplate}
                     onChange={(md) => onSaveDetail(viewNodeId, md)}
