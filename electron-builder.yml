@@ -1,0 +1,25 @@
+appId: com.cecilwwww.knowledgebox
+productName: 知识箱
+executableName: KnowledgeBox
+directories:
+  output: release
+files:
+  - dist/**/*
+  - desktop/**/*
+  - package.json
+extraResources:
+  - from: node_modules/vditor/dist
+    to: vditor/dist
+    filter:
+      - css/**/*
+      - images/**/*
+      - js/**/*
+win:
+  target: nsis
+  artifactName: KnowledgeBox-Setup-${version}-${arch}.${ext}
+nsis:
+  deleteAppDataOnUninstall: false
+publish:
+  provider: github
+  owner: cecilwwww-cmd
+  repo: knowledge-box

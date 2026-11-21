@@ -42,6 +42,7 @@ interface Props {
   onCancelRollup: (id: string) => void
   onOpenSettings: () => void
   onExport: () => void
+  onImport: (file: File) => void
   classifyMode: boolean
   checkedIds: string[]
   onToggleClassifyMode: () => void
@@ -69,6 +70,28 @@ interface HoverFlyoutState {
   title: string
   top: number
   left: number
+}
+
+function BackupImport({ onImport }: { onImport: Props['onImport'] }) {
+  const input = useRef<HTMLInputElement>(null)
+  return (
+    <>
+      <button type="button" title="导入备份" aria-label="导入备份" onClick={() => input.current?.click()}>
+        ⇧
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept=".json,application/json"
+        hidden
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0]
+          event.currentTarget.value = ''
+          if (file) onImport(file)
+        }}
+      />
+    </>
+  )
 }
 
 export function Sidebar(props: Props) {
@@ -190,6 +213,7 @@ export function Sidebar(props: Props) {
             <button type="button" title="导出备份" onClick={props.onExport}>
               ⇩
             </button>
+            <BackupImport onImport={props.onImport} />
             <button type="button" title="设置" onClick={props.onOpenSettings}>
               ⚙
             </button>
@@ -314,6 +338,7 @@ export function Sidebar(props: Props) {
           <button type="button" title="导出备份" onClick={props.onExport}>
             ⇩
           </button>
+          <BackupImport onImport={props.onImport} />
           <button type="button" title="设置" onClick={props.onOpenSettings}>
             ⚙
           </button>

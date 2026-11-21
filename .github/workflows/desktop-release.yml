@@ -1,0 +1,30 @@
+name: Publish Windows desktop release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Verify tag matches package version
+        run: node -e "const expected = 'v' + require('./package.json').version; if (expected !== process.env.GITHUB_REF_NAME) throw new Error('Expected tag ' + expected)"
+      - run: npm ci
+      - run: npm run package:win
+      - name: Publish Windows installer and update metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = "release/KnowledgeBox-Setup-$($env:GITHUB_REF_NAME.Substring(1))-x64.exe"
+          $notes = "Windows 64 位安装包。笔记保存在本机；可导入网页版导出的 JSON 备份。后续版本可通过「帮助 → 检查更新」获取。"
+          gh release create $env:GITHUB_REF_NAME --verify-tag --title "知识箱 Windows $env:GITHUB_REF_NAME" --notes $notes $installer "$installer.blockmap" release/latest.yml

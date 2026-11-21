@@ -80,6 +80,7 @@ export function useDetailVditor({
       value: initial,
       placeholder: VDITOR_PLACEHOLDER,
       cache: { enable: false },
+      ...(window.location.protocol === 'kb:' && { cdn: 'kb://local/vendor/vditor' }),
       toolbar: [...VDITOR_TOOLBAR],
       preview: VDITOR_PREVIEW,
       after: () => {

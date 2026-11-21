@@ -1,4 +1,6 @@
-const bakedKey = (import.meta.env.VITE_API_KEY as string | undefined)?.trim() || ''
+const bakedKey = import.meta.env.MODE === 'desktop'
+  ? ''
+  : (import.meta.env.VITE_API_KEY as string | undefined)?.trim() || ''
 
 /** 构建时可写入环境变量，让所有终端用户共用你的 DeepSeek 配置 */
 export const appConfig = {

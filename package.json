@@ -1,26 +1,23 @@
 {
   "name": "knowledge-box",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "description": "本地个人知识收纳与整理工具",
+  "author": "Knowledge Box",
+  "main": "desktop/main.cjs",
+  "repository": "https://github.com/cecilwwww-cmd/knowledge-box.git",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:desktop": "tsc -b && vite build --mode desktop",
+    "desktop": "npm run build:desktop && electron .",
+    "package:win": "npm run build:desktop && electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
-    "dexie": "^4.4.7",
-    "dexie-react-hooks": "^4.4.0",
-    "katex": "^0.19.1",
-    "mammoth": "^1.13.0",
-    "mind-elixir": "^6.0.0-next.4",
-    "pdfjs-dist": "^6.5.438",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "tesseract.js": "^7.0.0",
-    "uuid": "^14.0.3",
-    "vditor": "^4.0.1"
+    "electron-updater": "^6.8.11"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.5",
@@ -30,9 +27,22 @@
     "@types/react-dom": "^19.3.0",
     "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^6.1.2",
+    "dexie": "^4.4.7",
+    "dexie-react-hooks": "^4.4.0",
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
+    "katex": "^0.19.1",
+    "mammoth": "^1.13.0",
+    "mind-elixir": "^6.0.0-next.4",
     "oxlint": "^1.90.0",
+    "pdfjs-dist": "^6.5.438",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "tailwindcss": "^4.3.5",
+    "tesseract.js": "^7.0.0",
     "typescript": "~7.0.2",
+    "uuid": "^14.0.3",
+    "vditor": "^4.0.1",
     "vite": "^8.3.6"
   }
 }

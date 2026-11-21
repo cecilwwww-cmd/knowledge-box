@@ -2,6 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { appConfig, defaultAppSettings } from '../config'
 import { db, defaultMindmap, ensureSeedData } from '../db/database'
+import { importBackup } from '../db/importBackup'
 import type {
   AppSettings,
   KnowledgeNode,
@@ -647,6 +648,18 @@ export function useKnowledgeStore() {
     URL.revokeObjectURL(url)
   }, [])
 
+  const restoreBackup = useCallback(async (file: File) => {
+    setError('')
+    try {
+      const count = await importBackup(file)
+      setStatus(`备份导入完成，新增 ${count} 个笔记节点。`)
+    } catch (cause) {
+      setError(cause instanceof SyntaxError
+        ? '备份不是有效的 JSON 文件。'
+        : cause instanceof Error ? cause.message : '导入备份失败。')
+    }
+  }, [])
+
   return {
     ready,
     error,
@@ -685,6 +698,7 @@ export function useKnowledgeStore() {
     startOrganize,
     applyPreview,
     exportBackup,
+    restoreBackup,
     classifyMode,
     toggleClassifyMode,
     checkedIds,

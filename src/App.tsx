@@ -85,6 +85,7 @@ export default function App() {
         onCancelRollup={(id) => void store.cancelRollup(id)}
         onOpenSettings={() => store.setShowSettings(true)}
         onExport={() => void store.exportBackup()}
+        onImport={(file) => void store.restoreBackup(file)}
         classifyMode={store.classifyMode}
         checkedIds={store.checkedIds}
         onToggleClassifyMode={store.toggleClassifyMode}
