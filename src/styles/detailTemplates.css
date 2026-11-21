@@ -293,10 +293,15 @@
     "SimSun", "STSong", "Times New Roman", serif;
   font-size: 15px;
   line-height: 1.9;
-  padding: 28px 36px 40px !important;
   background: #fff;
-  max-width: 820px;
-  margin: 0 auto;
+}
+
+:is(.detail-tpl-paper, .vditor.kb-tpl-paper)
+  :is(.vditor-ir, .vditor-wysiwyg, .vditor-preview) > .vditor-reset {
+  /* Keep scrolling full width and set the reading measure with one inset. */
+  padding-block: 28px 40px !important;
+  padding-inline: max(clamp(16px, 3%, 40px), calc((100% - 1120px) / 2)) !important;
+  scrollbar-gutter: stable both-edges;
 }
 
 /* 报告题名：居中加粗 */
