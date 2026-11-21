@@ -8,24 +8,13 @@ import {
   VDITOR_PREVIEW,
   VDITOR_TOOLBAR,
 } from './vditorConfig'
-import {
-  applyRootChrome,
-  bindToolbarHover,
-  exitFullscreen,
-  findVditorRoot,
-  mountFullscreen,
-  restoreToHost,
-  setIrEditable,
-} from './vditorDom'
+import { applyRootChrome, exitFullscreen } from './vditorDom'
 
 type Options = {
   markdown: string
   onChange: (markdown: string) => void
   template: DetailTemplateId
   mode: DetailMode
-  toolbarVisible: boolean
-  onToolbarEnter: () => void
-  onToolbarLeave: () => void
 }
 
 /**
@@ -37,63 +26,55 @@ export function useDetailVditor({
   onChange,
   template,
   mode,
-  toolbarVisible,
-  onToolbarEnter,
-  onToolbarLeave,
 }: Options) {
   const hostRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Vditor | null>(null)
   const vditorElRef = useRef<HTMLElement | null>(null)
   const onChangeRef = useRef(onChange)
   const modeRef = useRef(mode)
-  const toolbarVisibleRef = useRef(toolbarVisible)
   const templateRef = useRef(template)
-  const onEnterRef = useRef(onToolbarEnter)
-  const onLeaveRef = useRef(onToolbarLeave)
 
   onChangeRef.current = onChange
   modeRef.current = mode
-  toolbarVisibleRef.current = toolbarVisible
   templateRef.current = template
-  onEnterRef.current = onToolbarEnter
-  onLeaveRef.current = onToolbarLeave
 
+  const [toolbarControls, setToolbarControls] = useState<HTMLElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   const syncChrome = (root: HTMLElement | null) => {
     applyRootChrome(root, {
-      toolbarVisible: toolbarVisibleRef.current,
       readMode: modeRef.current === 'read',
       template: templateRef.current,
     })
   }
 
   useEffect(() => {
-    if (!hostRef.current) return
+    const host = hostRef.current
+    if (!host) return
+    const root = document.createElement('div')
+    root.className = 'detail-vditor'
+    host.appendChild(root)
+    vditorElRef.current = root
     let cancelled = false
     let observer: MutationObserver | null = null
+    let fullscreen = false
+    let previousOverflow = ''
     const initial = normalizeMathMarkdown(markdown)
 
     const syncFullscreen = () => {
-      const root = vditorElRef.current || findVditorRoot(hostRef.current)
-      if (!root) {
-        setIsFullscreen(false)
-        return
-      }
-      vditorElRef.current = root
       const fs = root.classList.contains('vditor--fullscreen')
-      if (fs) mountFullscreen(root)
-      else restoreToHost(hostRef.current, root)
-      syncChrome(root)
-      bindToolbarHover(
-        root,
-        () => onEnterRef.current(),
-        () => onLeaveRef.current(),
-      )
+      if (fs === fullscreen) return
+      fullscreen = fs
+      // Moving the editor out of the panel keeps its fixed layout viewport-relative.
+      if (fs) document.body.appendChild(root)
+      else {
+        host.appendChild(root)
+        document.body.style.overflow = previousOverflow
+      }
       setIsFullscreen(fs)
     }
 
-    const editor = new Vditor(hostRef.current, {
+    const editor = new Vditor(root, {
       height: '100%',
       mode: 'ir',
       value: initial,
@@ -107,18 +88,23 @@ export function useDetailVditor({
           return
         }
         editorRef.current = editor
-        const root = hostRef.current?.querySelector(
-          '.vditor',
-        ) as HTMLElement | null
-        vditorElRef.current = root
-        if (root) {
-          observer = new MutationObserver(syncFullscreen)
-          observer.observe(root, {
-            attributes: true,
-            attributeFilter: ['class'],
-          })
+        syncChrome(root)
+        const toolbar = root.querySelector('.vditor-toolbar')
+        if (toolbar) {
+          const frame = document.createElement('div')
+          frame.className = 'detail-toolbar-frame'
+          toolbar.before(frame)
+          frame.appendChild(toolbar)
+          const controls = document.createElement('div')
+          controls.className = 'detail-toolbar-controls'
+          toolbar.prepend(controls)
+          setToolbarControls(controls)
         }
-        syncFullscreen()
+        observer = new MutationObserver(syncFullscreen)
+        observer.observe(root, {
+          attributes: true,
+          attributeFilter: ['class'],
+        })
         if (initial !== markdown) onChangeRef.current(initial)
       },
       input: (value) => {
@@ -131,12 +117,23 @@ export function useDetailVditor({
       },
     })
 
+    const rememberOverflow = (event: Event) => {
+      if (
+        !fullscreen &&
+        event.target instanceof Element &&
+        event.target.closest('button[data-type="fullscreen"]')
+      ) {
+        previousOverflow = document.body.style.overflow
+      }
+    }
+    root.addEventListener('click', rememberOverflow, true)
+    root.addEventListener('touchstart', rememberOverflow, true)
+
     return () => {
       cancelled = true
       observer?.disconnect()
-      const orphan = vditorElRef.current
-      if (orphan?.parentElement === document.body) orphan.remove()
-      document.body.style.overflow = ''
+      if (fullscreen) document.body.style.overflow = previousOverflow
+      root.remove()
       editorRef.current = null
       vditorElRef.current = null
       try {
@@ -144,7 +141,6 @@ export function useDetailVditor({
       } catch {
         // ignore
       }
-      if (hostRef.current) hostRef.current.innerHTML = ''
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -161,10 +157,7 @@ export function useDetailVditor({
   }, [markdown])
 
   useEffect(() => {
-    const root = vditorElRef.current
-    if (!root) return
-    root.classList.toggle('kb-read-mode', mode === 'read')
-    setIrEditable(root, mode === 'edit')
+    syncChrome(vditorElRef.current)
     if (mode === 'read') {
       try {
         editorRef.current?.blur()
@@ -172,27 +165,23 @@ export function useDetailVditor({
         // ignore
       }
     }
-  }, [mode])
-
-  useEffect(() => {
-    syncChrome(vditorElRef.current)
-  }, [toolbarVisible, isFullscreen, template, mode])
+  }, [template, mode])
 
   useEffect(() => {
     if (!isFullscreen) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return
       e.preventDefault()
-      exitFullscreen(hostRef.current)
+      exitFullscreen(vditorElRef.current)
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [isFullscreen])
 
   return {
     hostRef,
-    vditorElRef,
+    toolbarControls,
     isFullscreen,
-    exitFullscreen: () => exitFullscreen(hostRef.current),
+    exitFullscreen: () => exitFullscreen(vditorElRef.current),
   }
 }
