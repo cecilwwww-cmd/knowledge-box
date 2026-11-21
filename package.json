@@ -1,7 +1,7 @@
 {
   "name": "knowledge-box",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "description": "本地个人知识收纳与整理工具",
   "author": "Knowledge Box",
