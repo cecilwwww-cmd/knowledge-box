@@ -10,7 +10,6 @@ import { SourcesPanel } from './components/SourcesPanel'
 import { UiIcon } from './components/UiIcon'
 import { VaultBrowserModal } from './components/VaultBrowserModal'
 import { useKnowledgeStore } from './hooks/useKnowledgeStore'
-import { startUsageMetrics } from './lib/usageMetrics'
 import {
   filesFromClipboard,
   isEditablePasteTarget,
@@ -30,12 +29,6 @@ export default function App() {
   )
   const [vaultRootId, setVaultRootId] = useState<string | null>(null)
   const [copiedPath, setCopiedPath] = useState('')
-
-  useEffect(() => {
-    if (store.ready && store.settings.shareAnonymousUsage === true) {
-      return startUsageMetrics()
-    }
-  }, [store.ready, store.settings.shareAnonymousUsage])
 
   useEffect(() => {
     localStorage.setItem(COLLAPSE_KEY, sidebarCollapsed ? '1' : '0')
