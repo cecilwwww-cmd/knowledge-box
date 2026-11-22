@@ -1,9 +1,10 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { db } from '../db/database'
 import type { DetailTemplateId, SourceItem } from '../db/types'
 import { DetailEditor } from './detail'
 import { MindmapEditor, type MindmapSelectInfo } from './MindmapEditor'
+import { MindmapRelationshipGraph } from './MindmapRelationshipGraph'
 import { SourcePreview } from './SourcePreview'
 
 interface Props {
@@ -41,18 +42,21 @@ export function MindmapWorkspace({
   const [openId, setOpenId] = useState<string | null>(null)
   /** true = 导图在左；false = 右侧内容在左 */
   const [mindFirst, setMindFirst] = useState(true)
+  const [view, setView] = useState<'graph' | 'edit'>('graph')
+  const splitRef = useRef<HTMLDivElement>(null)
+  const [graphPercent, setGraphPercent] = useState(50)
   /** 右侧详情：默认当前节点；点带导航的导图分支后切到对应子节点 */
   const [viewNodeId, setViewNodeId] = useState(nodeId)
   /** 进入页 / 切换详情时播一次进入动效 */
   const [enterTick, setEnterTick] = useState(0)
   /** 是否显示左右分栏；可取消为仅导图 */
-  const [splitOpen, setSplitOpen] = useState(true)
+  const [splitOpen, setSplitOpen] = useState(false)
 
   useEffect(() => {
     setViewNodeId(nodeId)
     setOpenId(null)
     setEnterTick((t) => t + 1)
-    setSplitOpen(true)
+    setSplitOpen(false)
   }, [nodeId])
 
   const viewNode = useLiveQuery(
@@ -100,10 +104,19 @@ export function MindmapWorkspace({
     openSplitTo(info.kbNodeId || nodeId)
   }
 
+  const leftPercent = mindFirst ? graphPercent : 100 - graphPercent
+  const resizeTo = (left: number) => {
+    const bounded = Math.min(76, Math.max(24, left))
+    setGraphPercent(mindFirst ? bounded : 100 - bounded)
+  }
+
   return (
     <div className="mind-workspace">
       <div className="mind-source-links">
-        <span className="mind-source-label">分栏</span>
+        <button type="button" className="mind-source-chip" aria-pressed={view === 'graph'}
+          onClick={() => setView('graph')}>关系图谱</button>
+        <button type="button" className="mind-source-chip" aria-pressed={view === 'edit'}
+          onClick={() => setView('edit')}>编辑导图</button>
         {splitOpen ? (
           <button
             type="button"
@@ -156,8 +169,8 @@ export function MindmapWorkspace({
         ) : (
           <span className="mind-source-hint">
             {splitOpen
-              ? '点击带「导航」标签的分支，右侧切换到对应子节点详情'
-              : '已取消分栏；点「展开分栏」或导图导航分支可再打开'}
+              ? '拖动中间的分隔线可调整左右宽度'
+              : view === 'graph' ? '单击图中节点打开详情' : '点击导图分支打开对应详情'}
           </span>
         )}
         {linkable.length ? (
@@ -197,6 +210,8 @@ export function MindmapWorkspace({
       </div>
 
       <div
+        ref={splitRef}
+        style={{ '--mind-left': leftPercent / 100 } as CSSProperties}
         className={`mind-split ${splitOpen ? 'is-split' : 'is-solo'} ${
           splitOpen && !mindFirst ? 'is-swapped' : ''
         }`}
@@ -204,43 +219,73 @@ export function MindmapWorkspace({
         <div className="mind-split-pane pane-mind">
           <div className={`mind-pane ${splitOpen ? 'detail-pane' : ''}`}>
             {splitOpen && (
-              <header className="detail-pane-head"><strong>思维导图</strong></header>
+              <header className="detail-pane-head"><strong>{view === 'graph' ? '关系图谱' : '思维导图'}</strong></header>
             )}
-            <MindmapEditor
-              key={nodeId}
-              data={data}
-              onChange={onChange}
-              onSelectNode={handleSelect}
-            />
+            {view === 'graph' ? (
+              <MindmapRelationshipGraph key={nodeId} nodeId={nodeId} onSelectNode={(id) => {
+                setOpenId(null)
+                openSplitTo(id)
+              }} />
+            ) : (
+              <MindmapEditor key={nodeId} data={data} onChange={onChange} onSelectNode={handleSelect} />
+            )}
           </div>
         </div>
         {splitOpen ? (
-          <div className="mind-split-pane pane-detail is-visible">
+          <>
             <div
-              key={openSource?.id ?? `${viewNodeId}-${enterTick}`}
-              className="pane-detail-inner"
-            >
-              {openSource ? (
-                <SourcePreview source={openSource} />
-              ) : (
-                <div className="detail-pane">
-                  <header className="detail-pane-head">
-                    <strong>{paneTitle}</strong>
-                    {linkedAway ? (
-                      <span className="detail-pane-badge">联动</span>
-                    ) : null}
-                  </header>
-                  <DetailEditor
-                    key={viewNodeId}
-                    nodeId={viewNodeId}
-                    markdown={paneMarkdown}
-                    template={detailTemplate}
-                    onChange={(md) => onSaveDetail(viewNodeId, md)}
-                  />
-                </div>
-              )}
+              className="mind-divider"
+              role="separator"
+              aria-label="调整导图和详情的宽度"
+              aria-orientation="vertical"
+              aria-valuemin={24}
+              aria-valuemax={76}
+              aria-valuenow={Math.round(leftPercent)}
+              tabIndex={0}
+              onDoubleClick={() => resizeTo(50)}
+              onPointerDown={(event) => {
+                if (event.button !== 0) return
+                event.preventDefault()
+                event.currentTarget.focus()
+                event.currentTarget.setPointerCapture(event.pointerId)
+              }}
+              onPointerMove={(event) => {
+                if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+                const rect = splitRef.current?.getBoundingClientRect()
+                if (rect && rect.width > 8) resizeTo((event.clientX - rect.left - 4) / (rect.width - 8) * 100)
+              }}
+              onKeyDown={(event) => {
+                const target = { ArrowLeft: leftPercent - 4, ArrowRight: leftPercent + 4, Home: 24, End: 76 }[
+                  event.key as 'ArrowLeft' | 'ArrowRight' | 'Home' | 'End'
+                ]
+                if (target === undefined) return
+                event.preventDefault()
+                resizeTo(target)
+              }}
+              title="拖动调整宽度，双击恢复等宽"
+            />
+            <div className="mind-split-pane pane-detail is-visible">
+              <div key={openSource?.id ?? `${viewNodeId}-${enterTick}`} className="pane-detail-inner">
+                {openSource ? (
+                  <SourcePreview source={openSource} />
+                ) : (
+                  <div className="detail-pane">
+                    <header className="detail-pane-head">
+                      <strong>{paneTitle}</strong>
+                      {linkedAway && <span className="detail-pane-badge">联动</span>}
+                    </header>
+                    <DetailEditor
+                      key={viewNodeId}
+                      nodeId={viewNodeId}
+                      markdown={paneMarkdown}
+                      template={detailTemplate}
+                      onChange={(md) => onSaveDetail(viewNodeId, md)}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          </>
         ) : null}
       </div>
     </div>

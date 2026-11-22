@@ -59,6 +59,7 @@ export function MindmapEditor({ data, onChange, onSelectNode }: Props) {
     const scheduleSave = () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current)
       saveTimer.current = window.setTimeout(() => {
+        saveTimer.current = null
         onChangeRef.current(mei.getData())
       }, 400)
     }
@@ -87,7 +88,11 @@ export function MindmapEditor({ data, onChange, onSelectNode }: Props) {
     mei.container.addEventListener('click', onDomClick)
 
     return () => {
-      if (saveTimer.current) window.clearTimeout(saveTimer.current)
+      if (saveTimer.current) {
+        window.clearTimeout(saveTimer.current)
+        saveTimer.current = null
+        onChangeRef.current(mei.getData())
+      }
       mei.container.removeEventListener('click', onDomClick)
       instanceRef.current = null
       if (hostRef.current) hostRef.current.innerHTML = ''

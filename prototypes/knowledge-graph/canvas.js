@@ -1,0 +1,444 @@
+const TAU = Math.PI * 2
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n))
+const reduce = matchMedia('(prefers-reduced-motion: reduce)')
+const fade = (value, start, end) => {
+  const fraction = clamp((value - start) / (end - start), 0, 1)
+  return fraction * fraction * (3 - 2 * fraction)
+}
+
+function random(seed) {
+  return () => {
+    seed = Math.imul(1664525, seed) + 1013904223 | 0
+    return (seed >>> 0) / 4294967296
+  }
+}
+
+export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResize = false } = {}) {
+  const ctx = canvas.getContext('2d')
+  let graph, nodes = [], edges = [], active, hover, drag, scope, matches
+  let width = 0, height = 0, resolution = 1
+  let camera = { x: 0, y: 0, zoom: 1 }, goal = null
+  let fitZoom = 1, clickTimer
+  const snippets = new WeakMap()
+  let layout, last = 0, frame
+  const events = new AbortController()
+  const on = (name, listener, options) => canvas.addEventListener(name, listener, { ...options, signal: events.signal })
+  let visibleTypes = { tree: true, nav: true }
+  const fingers = new Map()
+  let pinch = null
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect()
+    const oldWidth = width, oldHeight = height
+    width = rect.width
+    height = rect.height
+    resolution = Math.min(2, devicePixelRatio || 1)
+    canvas.width = Math.round(width * resolution)
+    canvas.height = Math.round(height * resolution)
+    if (preserveResize && oldWidth && oldHeight) {
+      for (const target of [camera, goal]) {
+        if (!target) continue
+        target.x += (width - oldWidth) / 2
+        target.y += (height - oldHeight) / 2
+      }
+    } else fit(false)
+  }
+  const resizeObserver = new ResizeObserver(resize)
+  resizeObserver.observe(canvas)
+
+  function setGraph(next, keepView = false) {
+    const previous = keepView ? graph : null
+    const previousScope = scope
+    graph = next
+    const seeded = random(97)
+    const subgroups = new Map()
+    for (const node of graph.nodes.values()) {
+      const existing = previous?.nodes.get(node.id)
+      if (existing) {
+        const { x, y, ax, ay } = existing
+        Object.assign(node, { x, y, ax, ay, vx: 0, vy: 0 })
+        continue
+      }
+      if (node.group === -1) {
+        Object.assign(node, { x: 0, y: 0, ax: 0, ay: 0, vx: 0, vy: 0 })
+        continue
+      }
+      const angle = -2.65 + TAU * node.group / Math.max(2, graph.clusters.length)
+      const distance = graph.clusters.length === 1 ? 60 : 218
+      const group = graph.clusters[node.group]
+      let x = Math.cos(angle) * distance
+      let y = Math.sin(angle) * distance * .73
+      if (node !== group) {
+        const parent = graph.nodes.get(node.parentId)
+        const branch = parent && parent !== group ? parent.id : node.id
+        if (!subgroups.has(branch)) subgroups.set(branch, [seeded() * TAU, 36 + seeded() * 45])
+        const [branchAngle, branchDist] = subgroups.get(branch)
+        x += Math.cos(branchAngle) * branchDist
+        y += Math.sin(branchAngle) * branchDist
+        const variation = Math.sqrt(seeded()) * (node.children.length ? 25 : 98)
+        const jitter = seeded() * TAU
+        x += Math.cos(jitter) * variation
+        y += Math.sin(jitter) * variation
+      }
+      Object.assign(node, { x, y, ax: x, ay: y, vx: 0, vy: 0 })
+    }
+    active = hover = null
+    clearTimeout(clickTimer)
+    setScope(previous ? previousScope : null, false)
+    if (!previous) {
+      layout.tick(nodes.length > 700 ? 18 : 76)
+      fit(false)
+    }
+  }
+
+  function setScope(ids, fitView = true) {
+    scope = ids
+    nodes = [...graph.nodes.values()].filter(node => !scope || scope.has(node.id))
+    edges = graph.edges.filter(edge => !scope || scope.has(edge.from.id) && scope.has(edge.to.id))
+    layout = makeLayout()
+    hover = null
+    tooltip.hidden = true
+    if (fitView) fit()
+  }
+
+  function fit(smooth = true) {
+    if (!nodes.length || !width || !height) return
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    for (const node of nodes) {
+      minX = Math.min(minX, node.x); maxX = Math.max(maxX, node.x)
+      minY = Math.min(minY, node.y); maxY = Math.max(maxY, node.y)
+    }
+    const zoom = clamp(Math.min((width - 94) / (maxX - minX + 80), (height - 130) / (maxY - minY + 85)), .15, 1.45)
+    fitZoom = zoom
+    const x = width / 2 - (maxX + minX) / 2 * zoom
+    const y = height / 2 + 14 - (maxY + minY) / 2 * zoom
+    if (smooth && !reduce.matches) goal = { x, y, zoom }
+    else { goal = null; camera = { x, y, zoom } }
+  }
+
+  function center(node) {
+    const zoom = camera.zoom
+    goal = { x: width / 2 - node.x * zoom, y: height / 2 - node.y * zoom, zoom }
+    if (reduce.matches) { camera = goal; goal = null }
+  }
+
+  function zoomAt(px, py, scale, smooth = false) {
+    const old = smooth && goal ? goal : camera
+    const zoom = clamp(old.zoom * scale, .14, Math.max(5, fitZoom * 5))
+    const next = {
+      x: px - (px - old.x) * zoom / old.zoom,
+      y: py - (py - old.y) * zoom / old.zoom,
+      zoom,
+    }
+    if (smooth && !reduce.matches) goal = next
+    else { camera = next; goal = null }
+  }
+
+  function makeLayout() {
+    const { forceSimulation, forceLink, forceManyBody, forceCollide, forceX, forceY } = globalThis.d3
+    const links = edges.filter(edge => edge.type === 'tree').map(({ from, to }) => ({
+      source: from,
+      target: to,
+      distance: from.group === to.group ? (to.children.length ? 83 : 64) : 205,
+    }))
+    return forceSimulation(nodes).stop()
+      .alphaDecay(.04)
+      .velocityDecay(.48)
+      .force('tree', forceLink(links).distance(link => link.distance).strength(.34))
+      .force('charge', forceManyBody().strength(node => node.children.length ? -95 : -58).distanceMax(185))
+      .force('clearance', forceCollide(node => node.children.length ? 17 : 12).iterations(2))
+      .force('cluster-x', forceX(node => node.ax).strength(.105))
+      .force('cluster-y', forceY(node => node.ay).strength(.105))
+  }
+
+  const point = node => ({
+    x: node.x * camera.zoom + camera.x,
+    y: node.y * camera.zoom + camera.y,
+  })
+  const radius = node => clamp((node.depth === 0 ? 8 : node.children.length ? 6.5 : 3.8) * Math.sqrt(camera.zoom), 2, 13)
+  function paintEdges(focal) {
+    for (const { from, to, type } of edges) {
+      if (!visibleTypes[type]) continue
+      const a = point(from), b = point(to)
+      const strong = focal === from || focal === to
+      const navigates = type === 'nav'
+      ctx.strokeStyle = strong ? (navigates ? '#527b68' : '#87928b')
+        : (hover ? '#e9ede8' : navigates ? '#a5b5ab' : '#d2d8d3')
+      ctx.lineWidth = strong ? 1.35 : .85
+      ctx.setLineDash(navigates ? [3, 4] : [])
+      ctx.beginPath()
+      ctx.moveTo(a.x, a.y)
+      if (navigates) {
+        ctx.quadraticCurveTo((a.x + b.x) / 2 - (b.y - a.y) * .15,
+          (a.y + b.y) / 2 + (b.x - a.x) * .15, b.x, b.y)
+      } else ctx.lineTo(b.x, b.y)
+      ctx.stroke()
+    }
+    ctx.setLineDash([])
+  }
+
+  function nodeSnippet(node) {
+    let cached = snippets.get(node)
+    if (cached) return cached
+    const body = (node.markdown || '')
+      .replace(/!\[[^\]\n]*\]\((?:data:image\/|#kb-image-)[^\s)]+\)/g, '')
+      .split('\n')
+      .map(line => line.trim().replace(/^(?:#{1,6}|[-*])\s+/, '').replaceAll('**', ''))
+      .filter(line => line && line !== node.title && !line.startsWith('```'))
+      .slice(0, 12)
+    const branches = []
+    const root = node.mindmap
+    if (typeof root?.note === 'string' && root.note.trim()) branches.push(root.note)
+    const pending = Array.isArray(root?.children) ? [...root.children].reverse() : []
+    while (pending.length && branches.length < 12) {
+      const branch = pending.pop()
+      if (typeof branch?.topic === 'string' && branch.topic.trim()) {
+        const note = typeof branch.note === 'string' ? branch.note.trim() : ''
+        branches.push(note ? `${branch.topic}：${note}` : branch.topic)
+      }
+      if (Array.isArray(branch?.children)) pending.push(...[...branch.children].reverse())
+    }
+    cached = { body, branches }
+    snippets.set(node, cached)
+    return cached
+  }
+
+  function wrapLines(lines, maxWidth, maxLines) {
+    const result = []
+    for (const value of lines) {
+      let row = ''
+      for (const char of value.slice(0, 800)) {
+        if (row && ctx.measureText(row + char).width > maxWidth) {
+          result.push(row)
+          if (result.length === maxLines) return result
+          row = ''
+        }
+        row += char
+      }
+      if (row.trim()) result.push(row)
+      if (result.length === maxLines) return result
+    }
+    return result
+  }
+
+  const overlaps = (a, b) =>
+    a.x < b.x + b.w + 4 && a.x + a.w > b.x - 4 && Math.abs(a.y - b.y) < 15
+
+  function paintContent(captions, used, level) {
+    if (level < 1.5) return
+    ctx.font = '12px "Microsoft YaHei", sans-serif'
+    const lineWidth = clamp(111 + level * 27, 150, Math.min(265, width * .52))
+    for (const { node, p, x, y, priority } of captions) {
+      const { body, branches } = nodeSnippet(node)
+      const strong = priority >= 4
+      const right = x + lineWidth < width - 18
+      const left = right ? x : p.x - lineWidth - 15
+      if (left < 12 || y < 78) continue
+      const rowLimit = strong ? 5 : 3
+      const rows = [
+        ...wrapLines(body, lineWidth, rowLimit).map((line, index) => ({
+          line, color: '#4c5750', threshold: (strong ? 1.50 : 1.73) + index * .23,
+        })),
+        ...wrapLines(branches, lineWidth, rowLimit).map((line, index) => ({
+          line, color: node.color, threshold: (strong ? 2.45 : 2.72) + index * .23,
+        })),
+      ]
+      let offset = 17
+      for (const row of rows) {
+        const alpha = fade(level, row.threshold, row.threshold + .36)
+        if (!alpha) continue
+        const box = { x: left, y: y + offset, w: ctx.measureText(row.line).width }
+        if (box.y > height - 48 || used.some(entry => overlaps(box, entry))) break
+        used.push(box)
+        ctx.globalAlpha = alpha * (strong ? .95 : .78)
+        ctx.strokeStyle = '#fafbf9'
+        ctx.lineWidth = 3
+        ctx.strokeText(row.line, box.x, box.y)
+        ctx.fillStyle = row.color
+        ctx.fillText(row.line, box.x, box.y)
+        offset += 16
+      }
+    }
+    ctx.globalAlpha = 1
+  }
+
+  function paintNodes(focal) {
+    const captions = []
+    const adjacent = new Set(focal ? [...focal.links.keys()].filter(id => {
+      const link = focal.links.get(id)
+      return visibleTypes.tree && link.tree || visibleTypes.nav && (link.in || link.out)
+    }) : [])
+    for (const node of nodes) {
+      const p = point(node)
+      if (p.x < -50 || p.y < -50 || p.x > width + 50 || p.y > height + 50) continue
+      const r = radius(node)
+      const selected = node === active
+      const emphasized = node === focal || selected
+      const highlighted = emphasized || adjacent.has(node.id) || !!matches?.has(node.id)
+      const dimmed = !highlighted && (hover || matches)
+      ctx.fillStyle = emphasized ? '#315946' : dimmed ? '#a7afaa' : '#414944'
+      ctx.beginPath(); ctx.arc(p.x, p.y, emphasized ? r + 1.25 : r, 0, TAU); ctx.fill()
+      if (selected) {
+        ctx.strokeStyle = '#92aa9c'
+        ctx.lineWidth = 1
+        ctx.beginPath(); ctx.arc(p.x, p.y, r + 5, 0, TAU); ctx.stroke()
+      }
+      const level = camera.zoom / fitZoom
+      const priority = node === hover ? 5 : selected ? 4 : adjacent.has(node.id) ? 3 : node.children.length ? 2 : 1
+      const alpha = priority > 1 || adjacent.has(node.id) ? 1 : fade(level, 1.05, 1.65)
+      if (alpha > 0) captions.push({ node, p, r, priority, alpha })
+    }
+    captions.sort((a, b) => b.priority - a.priority)
+    const filled = []
+    const visibleCaptions = []
+    const level = camera.zoom / fitZoom
+    for (const { node, p, r, priority, alpha } of captions) {
+      const label = node.title.length > 17 ? node.title.slice(0, 16) + '…' : node.title
+      const isActive = priority >= 4
+      ctx.font = `${isActive ? 700 : 500} ${isActive ? 14 : 12}px "Microsoft YaHei", sans-serif`
+      const w = ctx.measureText(label).width
+      const x = p.x + r + w + 12 < width ? p.x + r + 8 : p.x - r - w - 8
+      const y = p.y - (isActive ? 13 : 2)
+      if (p.y < 70 || p.y > height - 38 || x < 5 ||
+          filled.some(box => overlaps({ x, y, w }, box))) continue
+      filled.push({ x, y, w })
+      visibleCaptions.push({ node, p, x, y, priority })
+      ctx.globalAlpha = alpha
+      ctx.strokeStyle = '#fafbf9'
+      ctx.lineWidth = 3.4
+      ctx.lineJoin = 'round'
+      ctx.strokeText(label, x, y)
+      ctx.fillStyle = isActive ? '#274738' : '#66726a'
+      ctx.fillText(label, x, y)
+    }
+    ctx.globalAlpha = 1
+    paintContent(visibleCaptions, filled, level)
+  }
+
+  function render(time) {
+    frame = requestAnimationFrame(render)
+    if (!width || !height || document.hidden || time - last < 24) return
+    last = time
+    if (goal) {
+      for (const key of ['x', 'y', 'zoom']) camera[key] += (goal[key] - camera[key]) * .19
+      if (Math.abs(goal.x - camera.x) + Math.abs(goal.y - camera.y) + Math.abs(goal.zoom - camera.zoom) < .04) {
+        camera = goal
+        goal = null
+      }
+    }
+    const focal = hover || active
+    ctx.setTransform(resolution, 0, 0, resolution, 0, 0)
+    ctx.clearRect(0, 0, width, height)
+    paintEdges(focal)
+    paintNodes(focal)
+  }
+  frame = requestAnimationFrame(render)
+
+  function position(event) {
+    const rect = canvas.getBoundingClientRect()
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+  }
+
+  function hit(p) {
+    let best, near = Infinity
+    for (const node of nodes) {
+      const spot = point(node)
+      const distance = Math.hypot(spot.x - p.x, spot.y - p.y)
+      if (distance < near && distance <= Math.max(12, radius(node) + 5)) { best = node; near = distance }
+    }
+    return best
+  }
+
+  function pinchGeometry() {
+    const [a, b] = fingers.values()
+    return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, size: Math.hypot(a.x - b.x, a.y - b.y) }
+  }
+
+  on('pointerdown', event => {
+    if (event.button !== 0 || fingers.size >= 2) return
+    const p = position(event)
+    fingers.set(event.pointerId, p)
+    canvas.setPointerCapture(event.pointerId)
+    tooltip.hidden = true
+    goal = null
+    if (fingers.size === 2) {
+      if (drag?.node) { drag.node.fx = null; drag.node.fy = null }
+      drag = null
+      pinch = pinchGeometry()
+      return
+    }
+    drag = { ...p, startX: p.x, startY: p.y, node: hit(p), moved: false }
+    canvas.classList.add('drag')
+  })
+  on('pointermove', event => {
+    const p = position(event)
+    if (fingers.has(event.pointerId)) fingers.set(event.pointerId, p)
+    if (pinch && fingers.size === 2) {
+      const shape = pinchGeometry()
+      if (pinch.size > 0) zoomAt(pinch.x, pinch.y, shape.size / pinch.size)
+      camera.x += shape.x - pinch.x; camera.y += shape.y - pinch.y
+      pinch = shape
+    } else if (drag) {
+      if (Math.hypot(p.x - drag.startX, p.y - drag.startY) > 4) drag.moved = true
+      if (!drag.moved) return
+      if (drag.node) {
+        const node = drag.node
+        node.x = node.fx = (p.x - camera.x) / camera.zoom
+        node.y = node.fy = (p.y - camera.y) / camera.zoom
+        if (!reduce.matches) layout.alpha(.18).tick(1)
+      } else {
+        camera.x += p.x - drag.x; camera.y += p.y - drag.y
+      }
+      drag.x = p.x; drag.y = p.y
+    } else if (event.pointerType === 'mouse') {
+      hover = hit(p)
+      canvas.style.cursor = hover ? 'pointer' : ''
+      tooltip.hidden = !hover
+      if (hover) {
+        tooltip.textContent = hover.title
+        tooltip.style.left = `${clamp(p.x + 12, 5, width - tooltip.offsetWidth - 5)}px`
+        tooltip.style.top = `${clamp(p.y + 15, 5, height - tooltip.offsetHeight - 5)}px`
+      }
+    }
+  })
+  const release = event => {
+    if (!fingers.has(event.pointerId)) return
+    fingers.delete(event.pointerId)
+    pinch = null
+    if (drag?.node) { drag.node.fx = null; drag.node.fy = null }
+    if (event.type === 'pointerup' && drag && !drag.moved && drag.node) {
+      const node = drag.node
+      clearTimeout(clickTimer)
+      clickTimer = setTimeout(() => onSelect(node), 245)
+    }
+    drag = null
+    canvas.classList.remove('drag')
+  }
+  on('pointerup', release)
+  on('pointercancel', release)
+  on('pointerleave', () => { hover = null; tooltip.hidden = true })
+  on('dblclick', event => {
+    const node = hit(position(event))
+    if (node) { clearTimeout(clickTimer); onFocus(node) }
+  })
+  on('wheel', event => {
+    event.preventDefault()
+    const p = position(event)
+    zoomAt(p.x, p.y, Math.exp(clamp(-event.deltaY, -140, 140) * .002), true)
+  }, { passive: false })
+
+  return {
+    setGraph, setScope, center, fit, zoom: scale => zoomAt(width / 2, height / 2, scale, true),
+    select: node => { active = node },
+    highlight: ids => { matches = ids },
+    edgeType: (type, enabled) => { visibleTypes[type] = enabled },
+    destroy: () => {
+      clearTimeout(clickTimer)
+      cancelAnimationFrame(frame)
+      resizeObserver.disconnect()
+      events.abort()
+      layout?.stop()
+      tooltip.hidden = true
+    },
+  }
+}

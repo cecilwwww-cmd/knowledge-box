@@ -8,6 +8,8 @@ files:
   - desktop/**/*
   - package.json
 extraResources:
+  - from: prototypes/knowledge-graph/vendor/D3-NOTICES.txt
+    to: licenses/D3-NOTICES.txt
   - from: node_modules/vditor/dist
     to: vditor/dist
     filter:

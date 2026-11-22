@@ -885,7 +885,8 @@ body.resizing * {
 }
 
 .mind-source-chip:hover,
-.mind-source-chip.active {
+.mind-source-chip.active,
+.mind-source-chip[aria-pressed='true'] {
   background: var(--accent-soft);
   border-color: var(--accent);
 }
@@ -901,7 +902,6 @@ body.resizing * {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 8px;
-  transition: grid-template-columns 320ms var(--mind-split-ease);
 }
 
 .mind-split.is-solo {
@@ -909,8 +909,9 @@ body.resizing * {
 }
 
 .mind-split.is-split {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: minmax(0, calc((100% - 8px) * var(--mind-left, .5))) 8px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
   animation: kb-split-enter 360ms var(--mind-split-ease);
 }
 
@@ -919,13 +920,94 @@ body.resizing * {
   cursor: not-allowed;
 }
 
-.mind-split.is-split.is-swapped .pane-mind {
-  order: 2;
+.mind-split.is-split > .pane-mind {
+  grid-area: 1 / 1;
 }
 
-.mind-split.is-split.is-swapped .pane-source,
-.mind-split.is-split.is-swapped .pane-detail {
-  order: 1;
+.mind-split.is-split > .pane-detail,
+.mind-split.is-split.is-swapped > .pane-mind {
+  grid-area: 1 / 3;
+}
+
+.mind-split.is-split.is-swapped > .pane-detail {
+  grid-area: 1 / 1;
+}
+
+.mind-divider {
+  grid-area: 1 / 2;
+  position: relative;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.mind-divider::after {
+  position: absolute;
+  content: '';
+  inset: calc(50% - 18px) 3px;
+  background: var(--line);
+  border-radius: 4px;
+}
+
+.mind-divider:is(:hover, :focus-visible)::after {
+  background: var(--accent);
+}
+
+.mind-relation-graph {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #fafbf9;
+}
+
+.mind-relation-graph canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: grab;
+}
+
+.mind-relation-graph canvas.drag { cursor: grabbing; }
+
+.mind-relation-tools, .mind-relation-zoom {
+  position: absolute;
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.mind-relation-tools { top: 9px; left: 9px; max-width: calc(100% - 18px); }
+.mind-relation-zoom { right: 9px; bottom: 9px; }
+.mind-relation-tools button, .mind-relation-zoom button, .mind-relation-tools select {
+  padding: 4px 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.mind-relation-tools select { min-width: 0; max-width: 140px; }
+.mind-relation-tools button:is(:hover, [aria-pressed='true']), .mind-relation-zoom button:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.mind-relation-tooltip {
+  pointer-events: none;
+  position: absolute;
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 7px;
+  font-size: 12px;
 }
 
 .mind-source-hint {
@@ -1132,17 +1214,23 @@ body.resizing * {
   line-height: 1.5;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 640px) {
   .mind-split.is-split {
     grid-template-columns: 1fr;
     grid-template-rows: minmax(0, 1fr) minmax(220px, 1fr);
+    gap: 8px;
   }
 
+  .mind-divider { display: none; }
+  .mind-split.is-split .pane-mind,
   .mind-split.is-split.is-swapped .pane-mind,
-  .mind-split.is-split.is-swapped .pane-source,
+  .mind-split.is-split .pane-detail,
   .mind-split.is-split.is-swapped .pane-detail {
-    order: unset;
+    grid-column: 1;
   }
+
+  .mind-split.is-split .pane-mind, .mind-split.is-split.is-swapped .pane-detail { grid-row: 1; }
+  .mind-split.is-split .pane-detail, .mind-split.is-split.is-swapped .pane-mind { grid-row: 2; }
 }
 
 /* 教材逻辑图式：根粗框、一级描边盒、深层下划线文本 */
