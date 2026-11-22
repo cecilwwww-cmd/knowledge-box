@@ -1,11 +1,6 @@
 import mammoth from 'mammoth'
-import * as pdfjs from 'pdfjs-dist'
 import { createWorker } from 'tesseract.js'
-
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString()
+import { openPdf } from './pdf'
 
 export type ExtractResult = {
   textContent: string
@@ -84,23 +79,28 @@ async function fileToDataUrl(file: File) {
 
 async function extractPdf(file: File): Promise<string> {
   const data = new Uint8Array(await file.arrayBuffer())
-  const pdf = await pdfjs.getDocument({ data }).promise
+  const loading = openPdf(data)
   const pages: string[] = []
-  for (let i = 1; i <= pdf.numPages; i += 1) {
-    const page = await pdf.getPage(i)
-    const content = await page.getTextContent()
-    const line = content.items
-      .map((item) => ('str' in item ? item.str : ''))
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-    if (line) pages.push(`## 第 ${i} 页\n${line}`)
+  try {
+    const pdf = await loading.promise
+    for (let i = 1; i <= pdf.numPages; i += 1) {
+      const page = await pdf.getPage(i)
+      const content = await page.getTextContent()
+      const line = content.items
+        .map((item) => ('str' in item ? item.str : ''))
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (line) pages.push(`## 第 ${i} 页\n${line}`)
+    }
+    const text = pages.join('\n\n').trim()
+    if (!text) {
+      return `[PDF: ${file.name}] 未提取到可选中文字，可能是扫描版。可另存为图片后拖入，将使用 OCR 识别。`
+    }
+    return text
+  } finally {
+    await loading.destroy()
   }
-  const text = pages.join('\n\n').trim()
-  if (!text) {
-    return `[PDF: ${file.name}] 未提取到可选中文字，可能是扫描版。可另存为图片后拖入，将使用 OCR 识别。`
-  }
-  return text
 }
 
 async function extractWord(file: File): Promise<string> {
@@ -110,9 +110,18 @@ async function extractWord(file: File): Promise<string> {
   }
   const arrayBuffer = await file.arrayBuffer()
   const result = await mammoth.extractRawText({ arrayBuffer })
-  const text = result.value.replace(/\n{3,}/g, '\n\n').trim()
-  if (!text) throw new Error(`Word 文件「${file.name}」未提取到文字`)
-  return text
+  return result.value.replace(/\n{3,}/g, '\n\n').trim()
+}
+
+async function readText(file: File) {
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes)
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes)
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    return new TextDecoder('gb18030').decode(bytes)
+  }
 }
 
 async function downscaleForOcr(file: File): Promise<{ blob: Blob; dataUrl: string }> {
@@ -182,21 +191,16 @@ export async function extractFromFile(
   file: File,
   onProgress?: (message: string) => void,
 ): Promise<ExtractResult> {
-  if (isPlainText(file) || file.type === 'application/json') {
-    onProgress?.(`读取文本：${file.name}`)
-    return { kind: 'text', textContent: await file.text() }
-  }
-
   if (isHtml(file)) {
     onProgress?.(`解析 HTML：${file.name}`)
-    const html = await file.text()
+    const html = await readText(file)
     return { kind: 'html', textContent: stripHtml(html) }
   }
 
   if (isPdf(file)) {
     onProgress?.(`解析 PDF：${file.name}`)
     const [textContent, dataUrl] = await Promise.all([
-      extractPdf(file),
+      extractPdf(file).catch(() => ''),
       fileToDataUrl(file),
     ])
     return { kind: 'pdf', textContent, dataUrl }
@@ -205,7 +209,7 @@ export async function extractFromFile(
   if (isWord(file)) {
     onProgress?.(`解析 Word：${file.name}`)
     const [textContent, dataUrl] = await Promise.all([
-      extractWord(file),
+      extractWord(file).catch(() => ''),
       fileToDataUrl(file),
     ])
     return { kind: 'word', textContent, dataUrl }
@@ -216,12 +220,12 @@ export async function extractFromFile(
     return { kind: 'image', textContent: text, dataUrl }
   }
 
-  onProgress?.(`尝试按文本读取：${file.name}`)
-  try {
-    return { kind: 'unknown', textContent: await file.text() }
-  } catch {
-    throw new Error(`暂不支持的文件类型：${file.name}`)
+  if (isPlainText(file) || file.type === 'application/json') {
+    onProgress?.(`读取文本：${file.name}`)
+    return { kind: 'text', textContent: await readText(file), dataUrl: await fileToDataUrl(file) }
   }
+
+  return { kind: 'unknown', textContent: '', dataUrl: await fileToDataUrl(file) }
 }
 
 /** @deprecated 兼容旧调用 */

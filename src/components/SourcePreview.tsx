@@ -1,78 +1,35 @@
+﻿import { lazy, Suspense } from 'react'
 import type { SourceItem } from '../db/types'
+import { sourceFile, sourceKind } from '../lib/sourceFile'
 
-interface Props {
-  source: SourceItem
-}
+const WordReader = lazy(() => import('./WordReader').then((mod) => ({ default: mod.WordReader })))
+const PdfReader = lazy(() => import('./PdfReader').then((mod) => ({ default: mod.PdfReader })))
 
-export function SourcePreview({ source }: Props) {
-  if (source.kind === 'image' && source.dataUrl) {
-    return (
-      <div className="source-preview">
-        <header>
-          <strong>{source.name}</strong>
-          <span>图片</span>
-        </header>
-        <div className="source-preview-body">
-          <img src={source.dataUrl} alt={source.name} />
-        </div>
-      </div>
-    )
-  }
-
-  if (source.kind === 'pdf' && source.dataUrl) {
-    return (
-      <div className="source-preview">
-        <header>
-          <strong>{source.name}</strong>
-          <a href={source.dataUrl} download={source.name}>
-            下载 PDF
-          </a>
-        </header>
-        <div className="source-preview-body">
-          <iframe title={source.name} src={source.dataUrl} />
-        </div>
-      </div>
-    )
-  }
-
-  if ((source.kind === 'word' || source.kind === 'pdf') && !source.dataUrl) {
-    return (
-      <div className="source-preview">
-        <header>
-          <strong>{source.name}</strong>
-          <span>{source.kind === 'word' ? 'Word 文本摘录' : 'PDF 文本摘录'}</span>
-        </header>
-        <div className="source-preview-body">
-          <pre>{source.textContent || '（无文本）'}</pre>
-        </div>
-      </div>
-    )
-  }
-
-  if (source.dataUrl && source.mimeType.startsWith('application/')) {
-    return (
-      <div className="source-preview">
-        <header>
-          <strong>{source.name}</strong>
-          <a href={source.dataUrl} download={source.name}>
-            下载文件
-          </a>
-        </header>
-        <div className="source-preview-body">
-          <pre>{source.textContent.slice(0, 8000) || '二进制文件，请下载查看。'}</pre>
-        </div>
-      </div>
-    )
-  }
+export function SourcePreview({ source }: { source: SourceItem }) {
+  const kind = sourceKind(source)
+  const file = sourceFile(source)
+  const legacyWord = kind === 'word' && /\.doc$/i.test(source.name)
+  const document = kind === 'pdf' || kind === 'word'
+  const loading = <p className="source-reader-status" role="status">正在打开文档…</p>
 
   return (
     <div className="source-preview">
       <header>
         <strong>{source.name}</strong>
-        <span>{source.kind || '文本'}</span>
+        {file && <a href={file} download={source.name}>下载原文件</a>}
       </header>
-      <div className="source-preview-body">
-        <pre>{source.textContent || '（无内容）'}</pre>
+      <div className={kind === 'pdf' && file ? 'source-preview-body is-pdf' : 'source-preview-body'}>
+        <Suspense fallback={loading}>
+          {kind === 'pdf' && file ? <PdfReader key={source.id} url={file} /> :
+            kind === 'word' && file && !legacyWord ? <WordReader key={source.id} url={file} text={source.textContent} /> :
+            kind === 'image' && file?.startsWith('data:image/') ? <img src={file} alt={source.name} /> :
+            <>
+              {legacyWord && <p className="source-reader-status">旧版 .doc 可下载查看，另存为 .docx 后可在应用内阅读。</p>}
+              {document && !file && <p className="source-reader-status">这条记录仅保存了文字摘录。重新导入原文件即可内嵌阅读。</p>}
+              {source.textContent ? <pre>{source.textContent}</pre> :
+                !document && <p className="source-reader-status">此文件没有可预览的文本。</p>}
+            </>}
+        </Suspense>
       </div>
     </div>
   )
