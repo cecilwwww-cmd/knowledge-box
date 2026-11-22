@@ -555,3 +555,73 @@
 .vditor.kb-tpl-paper {
   background: #fff;
 }
+/* Default reading layout */
+.vditor.kb-tpl-default .vditor-ir > .vditor-reset {
+  padding-block: 8px 36px !important;
+  padding-inline: max(clamp(16px, 6%, 48px), calc((100% - 1040px) / 2)) !important;
+  background: #fff;
+  color: #24332d;
+  font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+  font-size: 16px;
+  line-height: 1.7;
+  text-align: start;
+  scrollbar-gutter: stable both-edges;
+}
+
+.vditor.kb-tpl-default.kb-read-mode .vditor-ir > .vditor-reset {
+  opacity: 1;
+}
+
+.kb-tpl-default .vditor-reset h1 {
+  margin: 0 0 1.05em;
+  padding: 0;
+  border: 0;
+  color: #142620;
+  font-size: clamp(23px, 3vw, 30px);
+  font-weight: 750;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.kb-tpl-default .vditor-reset h2 {
+  margin: 1.35em 0 .78em;
+  padding: 0 0 .42em;
+  border-bottom: 1px solid #e8f0eb;
+  color: #142620;
+  font-size: 1.25em;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.kb-tpl-default .vditor-reset :is(h3, h4, h5, h6) {
+  margin: 1.35em 0 .65em;
+  color: #17664e;
+  font-size: 1.06em;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.kb-tpl-default .vditor-reset :is(ul, ol) { padding-inline-start: 1.35em; }
+.kb-tpl-default .vditor-reset li { margin-block: .38em; }
+.kb-tpl-default .vditor-reset li :is(ul, ol) { margin-block: .35em; }
+.kb-tpl-default.kb-read-mode .vditor-reset :is(h1, h2, h3, h4, h5, h6)::before {
+  display: none;
+}
+
+.detail-source-ref {
+  display: inline-block;
+  margin-inline: 3px 1px;
+  padding-inline: 5px;
+  border: 1px solid #bddbcb;
+  border-radius: 4px;
+  background: #e8f4ee;
+  color: #18654d;
+  font-size: 0;
+  white-space: nowrap;
+  vertical-align: .15em;
+}
+.detail-source-ref::before {
+  content: attr(data-label);
+  font-size: 12px;
+  line-height: 1.65;
+}

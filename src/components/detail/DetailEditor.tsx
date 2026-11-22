@@ -15,7 +15,7 @@ export function DetailEditor({
   template,
 }: DetailEditorProps) {
   const tpl = resolveDetailTemplate(template)
-  const [mode, setMode] = useState<DetailMode>('edit')
+  const [mode, setMode] = useState<DetailMode>(() => tpl === 'default' ? 'read' : 'edit')
   const { hostRef, toolbarControls, isFullscreen, exitFullscreen } =
     useDetailVditor({
       nodeId,

@@ -32,6 +32,48 @@ export function applyRootChrome(
   setIrEditable(root, !opts.readMode)
 }
 
+export function showSourceReferences(root: HTMLElement | null, enabled: boolean) {
+  const content = root?.querySelector('.vditor-ir pre.vditor-reset')
+  if (!content) return
+  if (!enabled) {
+    content.querySelectorAll('.detail-source-ref').forEach((item) => {
+      const parent = item.parentElement
+      item.replaceWith(document.createTextNode(item.textContent || ''))
+      parent?.normalize()
+    })
+    return
+  }
+
+  const pattern = /\[来源\s*(\d+)\]/g
+  const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
+  const candidates: Text[] = []
+  while (walker.nextNode()) {
+    const text = walker.currentNode as Text
+    if (text.data.includes('[来源') &&
+        !text.parentElement?.closest('.detail-source-ref, code, .vditor-ir__marker, .vditor-ir__node, a')) {
+      candidates.push(text)
+    }
+  }
+  for (const node of candidates) {
+    const fragment = document.createDocumentFragment()
+    let offset = 0
+    for (const match of node.data.matchAll(pattern)) {
+      const index = match.index
+      fragment.append(node.data.slice(offset, index))
+      const badge = document.createElement('span')
+      badge.className = 'detail-source-ref'
+      badge.dataset.label = `来源${match[1]}`
+      badge.textContent = match[0]
+      fragment.append(badge)
+      offset = index + match[0].length
+    }
+    if (offset) {
+      fragment.append(node.data.slice(offset))
+      node.replaceWith(fragment)
+    }
+  }
+}
+
 export function exitFullscreen(root: HTMLElement | null) {
   if (!root?.classList.contains('vditor--fullscreen')) return
   const button = root.querySelector<HTMLButtonElement>(

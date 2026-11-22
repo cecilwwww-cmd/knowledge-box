@@ -13,8 +13,8 @@ export type DetailTemplateMeta = {
 export const DETAIL_TEMPLATES: DetailTemplateMeta[] = [
   {
     id: 'default',
-    label: '简洁',
-    hint: '清爽默认排版',
+    label: '默认风',
+    hint: '居中标题、分级小节、绿色来源标记',
     ready: true,
   },
   {

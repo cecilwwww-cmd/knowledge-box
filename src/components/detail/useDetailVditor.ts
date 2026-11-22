@@ -16,7 +16,7 @@ import {
   VDITOR_PREVIEW,
   VDITOR_TOOLBAR,
 } from './vditorConfig'
-import { applyRootChrome, exitFullscreen } from './vditorDom'
+import { applyRootChrome, exitFullscreen, showSourceReferences } from './vditorDom'
 
 type Options = {
   nodeId: string
@@ -58,6 +58,9 @@ export function useDetailVditor({
       readMode: modeRef.current === 'read',
       template: templateRef.current,
     })
+  }
+  const syncReferences = (root: HTMLElement | null) => {
+    showSourceReferences(root, templateRef.current === 'default' && modeRef.current === 'read')
   }
 
   useEffect(() => {
@@ -124,6 +127,7 @@ export function useDetailVditor({
         const current = markdownRef.current
         const next = normalizeMathMarkdown(current)
         if (editor.getValue() !== next) editor.setValue(next, true)
+        syncReferences(root)
         if (next !== current) onChangeRef.current(next)
       },
       input: (value) => {
@@ -221,7 +225,9 @@ export function useDetailVditor({
     if (!editor) return
     const next = normalizeMathMarkdown(markdown)
     try {
+      if (modeRef.current === 'read') showSourceReferences(vditorElRef.current, false)
       if (editor.getValue() !== next) editor.setValue(next, true)
+      if (modeRef.current === 'read') syncReferences(vditorElRef.current)
     } catch {
       // ignore
     }
@@ -229,6 +235,7 @@ export function useDetailVditor({
 
   useEffect(() => {
     syncChrome(vditorElRef.current)
+    syncReferences(vditorElRef.current)
     if (mode === 'read') {
       try {
         editorRef.current?.blur()

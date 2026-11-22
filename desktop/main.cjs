@@ -57,6 +57,7 @@ function openExternal(url) {
 function createWindow() {
   const win = new BrowserWindow({
     title: '知识箱',
+    icon: path.join(app.getAppPath(), 'dist', 'app.ico'),
     width: 1280,
     height: 860,
     minWidth: 760,

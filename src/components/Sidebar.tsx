@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import type { TreeNode } from '../hooks/useKnowledgeStore'
+import { UiIcon } from './UiIcon'
 
 /** 菜单相对标题可见文字末尾的间距 */
 const HOVER_MENU_GAP = 8
@@ -95,6 +96,19 @@ function BackupImport({ onImport }: { onImport: Props['onImport'] }) {
 }
 
 export function Sidebar(props: Props) {
+  const [search, setSearch] = useState('')
+  const visibleIds = useMemo(() => {
+    const query = search.trim().toLocaleLowerCase()
+    if (!query) return null
+    const visible = new Set<string>()
+    const visit = (node: TreeNode, matchingParent = false) => {
+      const match = matchingParent || node.title.toLocaleLowerCase().includes(query)
+      node.children.forEach((child) => visit(child, match))
+      if (match || node.children.some(({ id }) => visible.has(id))) visible.add(node.id)
+    }
+    props.tree.forEach((node) => visit(node))
+    return visible
+  }, [props.tree, search])
   const [menu, setMenu] = useState<ContextMenuState | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [flyout, setFlyout] = useState<HoverFlyoutState | null>(null)
@@ -226,27 +240,34 @@ export function Sidebar(props: Props) {
   return (
     <aside className={`sidebar ${props.classifyMode ? 'classify-on' : ''}`}>
       <div className="sidebar-header">
-        <div className="brand">知识箱</div>
+        <div className="brand"><span className="brand-mark"><UiIcon name="box" /></span>知识箱</div>
         <button
           type="button"
           className="collapse-toggle"
           title="收起左侧栏"
           onClick={props.onToggleCollapse}
         >
-          «
+          <UiIcon name="collapse" />
         </button>
       </div>
+      <label className="sidebar-search">
+        <UiIcon name="search" />
+        <input type="search" placeholder="搜索笔记或知识点…" aria-label="搜索笔记或知识点"
+          value={search} onChange={(event) => setSearch(event.target.value)} />
+      </label>
       {props.classifyMode ? (
         <div className="classify-banner">
           归类模式：勾选要收拢的节点（≥2），再生成上级
         </div>
       ) : null}
       <div className="tree" onContextMenu={(e) => e.preventDefault()}>
-        {props.tree.map((node) => (
+        {visibleIds?.size === 0 && <p className="tree-empty">没有匹配的笔记</p>}
+        {props.tree.filter(({ id }) => !visibleIds || visibleIds.has(id)).map((node) => (
           <TreeItem
             key={node.id}
             node={node}
             depth={0}
+            visibleIds={visibleIds}
             selectedId={props.selectedId}
             hoverId={flyout?.nodeId ?? null}
             renamingId={renamingId}
@@ -512,6 +533,7 @@ export function Sidebar(props: Props) {
 function TreeItem({
   node,
   depth,
+  visibleIds,
   selectedId,
   hoverId,
   renamingId,
@@ -529,6 +551,7 @@ function TreeItem({
 }: {
   node: TreeNode
   depth: number
+  visibleIds: Set<string> | null
   selectedId: string | null
   hoverId: string | null
   renamingId: string | null
@@ -549,6 +572,8 @@ function TreeItem({
   const rowRef = useRef<HTMLDivElement>(null)
   const editing = renamingId === node.id
   const hasChildren = node.children.length > 0
+  const children = visibleIds ? node.children.filter(({ id }) => visibleIds.has(id)) : node.children
+  const showingChildren = visibleIds ? children.length > 0 : expanded
   const isHover = hoverId === node.id
 
   useEffect(() => {
@@ -586,6 +611,7 @@ function TreeItem({
     <div className={`tree-item depth-${depth}`}>
       <div
         ref={rowRef}
+        style={{ '--tree-indent': `${Math.min(depth, 12) * 17}px` } as CSSProperties}
         className={`tree-row ${selectedId === node.id ? 'active' : ''} ${isHover ? 'is-hover' : ''} ${checked ? 'checked' : ''}`}
         onMouseEnter={emitHover}
         onMouseLeave={() => onHoverRow(null)}
@@ -601,19 +627,23 @@ function TreeItem({
             title="勾选以归类"
           />
         ) : null}
-        {hasChildren ? (
+        {children.length > 0 && !visibleIds ? (
           <button
             type="button"
             className="twist"
             onClick={() => setExpanded((v) => !v)}
-            aria-label="展开"
+            aria-label={expanded ? '折叠子节点' : '展开子节点'}
+            aria-expanded={expanded}
           >
-            {expanded ? '▾' : '▸'}
+            <UiIcon name="down" />
           </button>
+        ) : visibleIds && children.length > 0 ? (
+          <span className="twist" aria-hidden="true"><UiIcon name="down" /></span>
         ) : (
           <span className="twist twist-spacer" aria-hidden="true" />
         )}
 
+        <span className="tree-node-icon"><UiIcon name={hasChildren || depth === 0 ? 'folder' : 'note'} /></span>
         {editing ? (
           <input
             className="tree-rename"
@@ -641,13 +671,14 @@ function TreeItem({
         )}
       </div>
 
-      {expanded && hasChildren ? (
+      {showingChildren && children.length > 0 ? (
         <div className="tree-children">
-          {node.children.map((child) => (
+          {children.map((child) => (
             <TreeItem
               key={child.id}
               node={child}
               depth={depth + 1}
+              visibleIds={visibleIds}
               selectedId={selectedId}
               hoverId={hoverId}
               renamingId={renamingId}

@@ -7,8 +7,10 @@ import { readSidebarWidth, ResizeHandle } from './components/ResizeHandle'
 import { SettingsModal } from './components/SettingsModal'
 import { Sidebar } from './components/Sidebar'
 import { SourcesPanel } from './components/SourcesPanel'
+import { UiIcon } from './components/UiIcon'
 import { VaultBrowserModal } from './components/VaultBrowserModal'
 import { useKnowledgeStore } from './hooks/useKnowledgeStore'
+import { startUsageMetrics } from './lib/usageMetrics'
 import {
   filesFromClipboard,
   isEditablePasteTarget,
@@ -27,6 +29,13 @@ export default function App() {
     () => localStorage.getItem('knowledge-box-organize-collapsed') === '1',
   )
   const [vaultRootId, setVaultRootId] = useState<string | null>(null)
+  const [copiedPath, setCopiedPath] = useState('')
+
+  useEffect(() => {
+    if (store.ready && store.settings.shareAnonymousUsage === true) {
+      return startUsageMetrics()
+    }
+  }, [store.ready, store.settings.shareAnonymousUsage])
 
   useEffect(() => {
     localStorage.setItem(COLLAPSE_KEY, sidebarCollapsed ? '1' : '0')
@@ -57,9 +66,8 @@ export default function App() {
     return <div className="boot">正在打开本地知识箱…</div>
   }
 
-  const path = store.selected
-    ? buildPath(store.nodes, store.selected.id).join(' / ')
-    : ''
+  const path = store.selected ? buildPath(store.nodes, store.selected.id) : []
+  const pathText = path.join(' / ')
 
   const columnWidth = sidebarCollapsed ? COLLAPSED_WIDTH : sidebarWidth
 
@@ -105,15 +113,31 @@ export default function App() {
       <main className="workspace">
         <header className="workspace-header">
           <div className="breadcrumb-row">
-            <div className="breadcrumb">{path || '未选择节点'}</div>
-            <button
-              type="button"
-              className="organize-toggle"
-              title={organizeCollapsed ? '展开整理条' : '收起整理条'}
-              onClick={() => setOrganizeCollapsed((v) => !v)}
-            >
-              {organizeCollapsed ? '▾ 整理' : '▴ 整理'}
-            </button>
+            <div className="breadcrumb" title={pathText}>
+              {path.slice(0, -1).map((name, i) => <span key={i}>{name}<i aria-hidden="true">/</i></span>)}
+              <strong>{path.at(-1) || '未选择节点'}</strong>
+            </div>
+            <div className="breadcrumb-actions">
+              {pathText && (
+                <button type="button" className="breadcrumb-copy" title="复制知识库路径" onClick={() => {
+                  void navigator.clipboard.writeText(pathText).then(() => {
+                    setCopiedPath(pathText)
+                    window.setTimeout(() => setCopiedPath((value) => value === pathText ? '' : value), 1600)
+                  }).catch(() => store.setError('无法复制知识库路径'))
+                }}>
+                  <UiIcon name="copy" />{copiedPath === pathText ? '已复制' : '复制'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="organize-toggle"
+                aria-expanded={!organizeCollapsed}
+                title={organizeCollapsed ? '展开整理条' : '收起整理条'}
+                onClick={() => setOrganizeCollapsed((v) => !v)}
+              >
+                <UiIcon name="down" />整理
+              </button>
+            </div>
           </div>
           {store.error ? (
             <div className="error-banner">

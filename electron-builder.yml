@@ -17,6 +17,7 @@ extraResources:
       - images/**/*
       - js/**/*
 win:
+  icon: public/app.ico
   target: nsis
   artifactName: KnowledgeBox-Setup-${version}-${arch}.${ext}
 nsis:
