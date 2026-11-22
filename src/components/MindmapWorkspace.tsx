@@ -1,10 +1,11 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { db } from '../db/database'
 import type { DetailTemplateId, SourceItem } from '../db/types'
 import { DetailEditor } from './detail'
 import { MindmapEditor, type MindmapSelectInfo } from './MindmapEditor'
 import { MindmapRelationshipGraph } from './MindmapRelationshipGraph'
+import { PaneDivider } from './PaneDivider'
 import { SourcePreview } from './SourcePreview'
 
 interface Props {
@@ -43,7 +44,6 @@ export function MindmapWorkspace({
   /** true = 导图在左；false = 右侧内容在左 */
   const [mindFirst, setMindFirst] = useState(true)
   const [view, setView] = useState<'graph' | 'edit'>('graph')
-  const splitRef = useRef<HTMLDivElement>(null)
   const [graphPercent, setGraphPercent] = useState(50)
   /** 右侧详情：默认当前节点；点带导航的导图分支后切到对应子节点 */
   const [viewNodeId, setViewNodeId] = useState(nodeId)
@@ -210,7 +210,6 @@ export function MindmapWorkspace({
       </div>
 
       <div
-        ref={splitRef}
         style={{ '--mind-left': leftPercent / 100 } as CSSProperties}
         className={`mind-split ${splitOpen ? 'is-split' : 'is-solo'} ${
           splitOpen && !mindFirst ? 'is-swapped' : ''
@@ -233,37 +232,7 @@ export function MindmapWorkspace({
         </div>
         {splitOpen ? (
           <>
-            <div
-              className="mind-divider"
-              role="separator"
-              aria-label="调整导图和详情的宽度"
-              aria-orientation="vertical"
-              aria-valuemin={24}
-              aria-valuemax={76}
-              aria-valuenow={Math.round(leftPercent)}
-              tabIndex={0}
-              onDoubleClick={() => resizeTo(50)}
-              onPointerDown={(event) => {
-                if (event.button !== 0) return
-                event.preventDefault()
-                event.currentTarget.focus()
-                event.currentTarget.setPointerCapture(event.pointerId)
-              }}
-              onPointerMove={(event) => {
-                if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
-                const rect = splitRef.current?.getBoundingClientRect()
-                if (rect && rect.width > 8) resizeTo((event.clientX - rect.left - 4) / (rect.width - 8) * 100)
-              }}
-              onKeyDown={(event) => {
-                const target = { ArrowLeft: leftPercent - 4, ArrowRight: leftPercent + 4, Home: 24, End: 76 }[
-                  event.key as 'ArrowLeft' | 'ArrowRight' | 'Home' | 'End'
-                ]
-                if (target === undefined) return
-                event.preventDefault()
-                resizeTo(target)
-              }}
-              title="拖动调整宽度，双击恢复等宽"
-            />
+            <PaneDivider label="调整导图和详情的宽度" value={leftPercent} onChange={resizeTo} />
             <div className="mind-split-pane pane-detail is-visible">
               <div key={openSource?.id ?? `${viewNodeId}-${enterTick}`} className="pane-detail-inner">
                 {openSource ? (

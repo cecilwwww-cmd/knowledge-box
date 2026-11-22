@@ -215,6 +215,7 @@
   cursor: default;
   user-select: text;
   caret-color: transparent;
+  opacity: 1;
 }
 
 .detail-editor.is-read .vditor-ir__marker,
@@ -342,7 +343,7 @@
 }
 
 /* 纠正 Vditor table { display:block } 导致的「格子挤左、右侧空白」 */
-.detail-editor .vditor-reset table {
+:is(.detail-editor, .detail-vditor) .vditor-reset table {
   display: table !important;
   width: 100% !important;
   table-layout: fixed;
@@ -350,20 +351,19 @@
   overflow: visible;
 }
 
-.detail-editor .vditor-reset table thead {
+:is(.detail-editor, .detail-vditor) .vditor-reset table thead {
   display: table-header-group !important;
 }
 
-.detail-editor .vditor-reset table tbody {
+:is(.detail-editor, .detail-vditor) .vditor-reset table tbody {
   display: table-row-group !important;
 }
 
-.detail-editor .vditor-reset table tr {
+:is(.detail-editor, .detail-vditor) .vditor-reset table tr {
   display: table-row !important;
 }
 
-.detail-editor .vditor-reset table td,
-.detail-editor .vditor-reset table th {
+:is(.detail-editor, .detail-vditor) .vditor-reset table :is(td, th) {
   display: table-cell !important;
   white-space: normal !important;
   word-break: break-word;

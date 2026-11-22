@@ -568,8 +568,47 @@
   scrollbar-gutter: stable both-edges;
 }
 
-.vditor.kb-tpl-default.kb-read-mode .vditor-ir > .vditor-reset {
-  opacity: 1;
+.vditor.kb-tpl-default .vditor-reset table {
+  margin-block: 0.75em 1em;
+  max-width: none;
+  table-layout: auto;
+  font-size: 0.91em;
+  line-height: 1.55;
+}
+
+.vditor.kb-tpl-default .vditor-reset table:has(thead tr > :nth-child(6)) {
+  min-width: 42rem;
+}
+
+.vditor.kb-tpl-default .vditor-reset table:has(thead tr > :nth-child(8)) {
+  min-width: 48rem;
+}
+
+.vditor.kb-tpl-default .vditor-reset table :is(th, td) {
+  min-width: 3.4em;
+  padding: 0.46em 0.64em;
+  border: 1px solid #dce8e1;
+  text-align: center;
+  vertical-align: middle;
+  word-break: normal;
+  overflow-wrap: break-word;
+  font-variant-numeric: tabular-nums;
+}
+
+.vditor.kb-tpl-default .vditor-reset table th {
+  background: #eaf4ee;
+  color: #1d503e;
+  font-weight: 700;
+  white-space: nowrap !important;
+}
+
+.vditor.kb-tpl-default .vditor-reset table td { background: #fff; }
+.vditor.kb-tpl-default .vditor-reset table tr:nth-child(even) td { background: #f7faf8; }
+.vditor.kb-tpl-default .vditor-reset table [align='left'] { text-align: left; }
+.vditor.kb-tpl-default .vditor-reset table [align='right'] { text-align: right; }
+
+.vditor.kb-tpl-default .vditor-ir > .vditor-reset {
+  overflow-x: auto;
 }
 
 .kb-tpl-default .vditor-reset h1 {

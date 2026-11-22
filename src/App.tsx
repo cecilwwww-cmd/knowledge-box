@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { DetailEditor } from './components/detail'
 import { MindmapWorkspace } from './components/MindmapWorkspace'
 import { OrganizeBar } from './components/OrganizeBar'
+import { PaneDivider } from './components/PaneDivider'
 import { PreviewModal } from './components/PreviewModal'
 import { readSidebarWidth, ResizeHandle } from './components/ResizeHandle'
 import { SettingsModal } from './components/SettingsModal'
@@ -29,6 +30,8 @@ export default function App() {
   )
   const [vaultRootId, setVaultRootId] = useState<string | null>(null)
   const [copiedPath, setCopiedPath] = useState('')
+  const [wideSource, setWideSource] = useState(false)
+  const [notePercent, setNotePercent] = useState(52)
 
   useEffect(() => {
     localStorage.setItem(COLLAPSE_KEY, sidebarCollapsed ? '1' : '0')
@@ -61,6 +64,8 @@ export default function App() {
 
   const path = store.selected ? buildPath(store.nodes, store.selected.id) : []
   const pathText = path.join(' / ')
+  const showingSource = store.activeTab === 'sources'
+  const showingMap = store.activeTab === 'mindmap'
 
   const columnWidth = sidebarCollapsed ? COLLAPSED_WIDTH : sidebarWidth
 
@@ -111,6 +116,20 @@ export default function App() {
               <strong>{path.at(-1) || '未选择节点'}</strong>
             </div>
             <div className="breadcrumb-actions">
+              {store.selected && (
+                <div className="workspace-actions" aria-label="工作区视图">
+                  <button type="button" aria-pressed={showingSource} onClick={() => {
+                    if (!showingSource) setWideSource(false)
+                    store.setActiveTab(showingSource ? 'detail' : 'sources')
+                  }}>
+                    <UiIcon name="folder" />原料{store.sources.length ? ` ${store.sources.length}` : ''}
+                  </button>
+                  <button type="button" aria-pressed={showingMap}
+                    onClick={() => store.setActiveTab(showingMap ? 'detail' : 'mindmap')}>
+                    <UiIcon name="graph" />导图
+                  </button>
+                </div>
+              )}
               {pathText && (
                 <button type="button" className="breadcrumb-copy" title="复制知识库路径" onClick={() => {
                   void navigator.clipboard.writeText(pathText).then(() => {
@@ -143,48 +162,21 @@ export default function App() {
           {store.status ? <div className="status-banner">{store.status}</div> : null}
         </header>
 
-        {!organizeCollapsed ? (
-          <>
-            <OrganizeBar
-              prompt={store.prompt}
-              onPromptChange={store.setPrompt}
-              onFiles={(files) => void store.addFiles(files)}
-              onOrganize={(opts) => void store.startOrganize(opts)}
-              organizing={store.organizing || store.parsing}
-              disabled={!store.selected || store.parsing}
-            />
-            <div className="tabs" role="tablist">
-              {(
-                [
-                  ['sources', '原料'],
-                  ['mindmap', '思维导图'],
-                  ['detail', '详细内容'],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={store.activeTab === key}
-                  className={store.activeTab === key ? 'active' : ''}
-                  onClick={() => store.setActiveTab(key)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </>
-        ) : null}
+        {!organizeCollapsed && (
+          <OrganizeBar
+            prompt={store.prompt}
+            onPromptChange={store.setPrompt}
+            onFiles={(files) => void store.addFiles(files)}
+            onOrganize={(opts) => void store.startOrganize(opts)}
+            organizing={store.organizing || store.parsing}
+            disabled={!store.selected || store.parsing}
+          />
+        )}
 
         <div className="workspace-body">
           {!store.selected ? (
             <div className="empty-panel">在左侧选择或新建一个节点。</div>
-          ) : store.activeTab === 'sources' ? (
-            <SourcesPanel
-              sources={store.sources}
-              onRemove={(id) => void store.removeSource(id)}
-            />
-          ) : store.activeTab === 'mindmap' ? (
+          ) : showingMap ? (
             <MindmapWorkspace
               nodeId={store.selected.id}
               nodeTitle={store.selected.title}
@@ -197,13 +189,31 @@ export default function App() {
               onOpenNode={(id) => store.selectNode(id, 'detail')}
             />
           ) : (
-            <DetailEditor
-              key={store.selected.id}
-              nodeId={store.selected.id}
-              markdown={store.detail?.markdown ?? ''}
-              template={store.settings.detailTemplate}
-              onChange={(md) => void store.saveDetail(md)}
-            />
+            <div className={`reading-workspace ${showingSource && !wideSource ? 'is-comparing' : ''}`}
+              style={{ '--mind-left': notePercent / 100 } as CSSProperties}>
+              <div className="workspace-note" hidden={showingSource && wideSource}>
+                <DetailEditor
+                  key={store.selected.id}
+                  nodeId={store.selected.id}
+                  markdown={store.detail?.markdown ?? ''}
+                  template={store.settings.detailTemplate}
+                  onChange={(md) => void store.saveDetail(md)}
+                />
+              </div>
+              {showingSource && (
+                <>
+                  {!wideSource && <PaneDivider label="调整详情和原料的宽度" value={notePercent} onChange={setNotePercent} />}
+                  <SourcesPanel
+                    key={store.selected.id}
+                    sources={store.sources}
+                    wide={wideSource}
+                    onToggleWide={() => setWideSource((value) => !value)}
+                    onClose={() => store.setActiveTab('detail')}
+                    onRemove={(id) => void store.removeSource(id)}
+                  />
+                </>
+              )}
+            </div>
           )}
         </div>
 

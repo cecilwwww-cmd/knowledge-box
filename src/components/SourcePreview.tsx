@@ -5,7 +5,7 @@ import { sourceFile, sourceKind } from '../lib/sourceFile'
 const WordReader = lazy(() => import('./WordReader').then((mod) => ({ default: mod.WordReader })))
 const PdfReader = lazy(() => import('./PdfReader').then((mod) => ({ default: mod.PdfReader })))
 
-export function SourcePreview({ source }: { source: SourceItem }) {
+export function SourcePreview({ source, onRemove }: { source: SourceItem; onRemove?: () => void }) {
   const kind = sourceKind(source)
   const file = sourceFile(source)
   const legacyWord = kind === 'word' && /\.doc$/i.test(source.name)
@@ -16,13 +16,24 @@ export function SourcePreview({ source }: { source: SourceItem }) {
     <div className="source-preview">
       <header>
         <strong>{source.name}</strong>
-        {file && <a href={file} download={source.name}>下载原文件</a>}
+        <div className="source-preview-actions">
+          {file && <a href={file} download={source.name}>下载原文件</a>}
+          {onRemove && <button type="button" onClick={onRemove}>移除</button>}
+        </div>
       </header>
       <div className={kind === 'pdf' && file ? 'source-preview-body is-pdf' : 'source-preview-body'}>
         <Suspense fallback={loading}>
           {kind === 'pdf' && file ? <PdfReader key={source.id} url={file} /> :
             kind === 'word' && file && !legacyWord ? <WordReader key={source.id} url={file} text={source.textContent} /> :
-            kind === 'image' && file?.startsWith('data:image/') ? <img src={file} alt={source.name} /> :
+            kind === 'image' && file?.startsWith('data:image/') ? (
+              <>
+                <img src={file} alt={source.name} />
+                {source.textContent && <details className="ocr-details">
+                  <summary>本地 OCR 文本</summary>
+                  <pre>{source.textContent}</pre>
+                </details>}
+              </>
+            ) :
             <>
               {legacyWord && <p className="source-reader-status">旧版 .doc 可下载查看，另存为 .docx 后可在应用内阅读。</p>}
               {document && !file && <p className="source-reader-status">这条记录仅保存了文字摘录。重新导入原文件即可内嵌阅读。</p>}
