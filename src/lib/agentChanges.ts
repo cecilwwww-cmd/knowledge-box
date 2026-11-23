@@ -4,6 +4,7 @@ import type { AgentBatch, AgentChange } from '../db/agentTypes'
 import type { DetailDoc, KnowledgeNode, MindmapDoc, MindmapTreeNode, SourceItem } from '../db/types'
 import { treeToMindElixir } from './organize'
 import { normalizeMathMarkdown } from './normalizeMathMarkdown'
+import { appendMindmapChildren, MindmapPlanError } from './agentMindmap'
 
 export type AgentScope = 'current' | 'library'
 
@@ -90,10 +91,12 @@ function assertTree(nodes: KnowledgeNode[]) {
   }
 }
 
-function parseMap(value: unknown, resolve: (id: unknown) => string): MindmapTreeNode {
+function parseMapBranches(values: unknown[], resolve: (id: unknown) => string, maxNodes: number, maxDepth: number) {
   let count = 0
   const visit = (raw: unknown, depth: number): MindmapTreeNode => {
-    if (++count > 150 || depth > 10) throw new Error('导图分支过多或层级过深。')
+    if (++count > maxNodes || depth > maxDepth) {
+      throw new MindmapPlanError(`本次导图修改超过上限（${maxNodes} 个节点、${maxDepth + 1} 层）。细化已有导图时请用 extend_mindmap 按分支添加。`)
+    }
     const item = object(raw)
     if (item.children !== undefined && !Array.isArray(item.children)) throw new Error('导图分支格式无效。')
     return {
@@ -103,7 +106,7 @@ function parseMap(value: unknown, resolve: (id: unknown) => string): MindmapTree
       children: (item.children ?? []).map((child: unknown) => visit(child, depth + 1)),
     }
   }
-  return visit(value, 0)
+  return values.map((value) => visit(value, 0))
 }
 
 function mapOutline(tree: MindmapTreeNode, depth = 0): string {
@@ -128,6 +131,7 @@ export function buildAgentPreview(
   const nodes = new Map<string, AgentChange<KnowledgeNode>>()
   const details = new Map<string, AgentChange<DetailDoc>>()
   const maps = new Map<string, AgentChange<MindmapDoc>>()
+  const addedBranches = new Map<string, number>()
   const siblingSort = new Map<string | null, number>()
   for (const node of snapshot.nodes) {
     siblingSort.set(node.parentId, Math.max(siblingSort.get(node.parentId) ?? 0, node.sort + 1))
@@ -189,12 +193,31 @@ export function buildAgentPreview(
       const parentTitle = (key: string | null) => key ? current.get(key)?.title ?? '上级目录' : '知识库顶层'
       items.push({ label: '移动 · ' + node.title, before: parentTitle(node.parentId), after: parentTitle(parentId) })
     } else if (op.kind === 'mindmap') {
-      const tree = parseMap(op.tree, resolve)
+      const [tree] = parseMapBranches([op.tree], resolve, 150, 10)
       maps.set(id, { key: id, before: snapshot.maps.get(id) ?? null, after: {
         nodeId: id, data: treeToMindElixir(tree), updatedAt: now,
       } })
       saveNode({ ...node, updatedAt: now })
       items.push({ label: '更新导图 · ' + node.title, after: mapOutline(tree) })
+    } else if (op.kind === 'extend_mindmap') {
+      if (!Array.isArray(op.children) || op.children.length === 0) {
+        throw new MindmapPlanError('细化导图时需要提供要新增的子分支。')
+      }
+      const branchId = field(op.branchId, 160)
+      const branches = parseMapBranches(op.children, resolve, 30, 3)
+      const count = (items: MindmapTreeNode[]): number =>
+        items.reduce((sum, item) => sum + 1 + count(item.children ?? []), 0)
+      const total = (addedBranches.get(id) ?? 0) + count(branches)
+      if (total > 120) throw new MindmapPlanError('同一张导图一次最多新增 120 个节点，请分批细化。')
+      addedBranches.set(id, total)
+      const before = snapshot.maps.get(id) ?? null
+      const base = maps.get(id)?.after?.data ?? before?.data
+      const children = branches.map((branch) =>
+        (treeToMindElixir(branch) as { nodeData: Record<string, unknown> }).nodeData)
+      const extension = appendMindmapChildren(base, branchId, children)
+      maps.set(id, { key: id, before, after: { nodeId: id, data: extension.data, updatedAt: now } })
+      saveNode({ ...node, updatedAt: now })
+      items.push({ label: '细化分支 · ' + extension.topic, after: branches.map((branch) => mapOutline(branch)).join('\n') })
     } else if (op.kind === 'edit') {
       const existing = details.get(id)?.after?.markdown ?? snapshot.details.get(id)?.markdown ?? ''
       let markdown

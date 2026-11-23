@@ -1,6 +1,7 @@
 ﻿import type { AppSettings } from '../db/types'
 import { outlineFromMindElixir } from './rollup'
 import { buildAgentPreview, object, readAgentSnapshot, type AgentPreview, type AgentScope } from './agentChanges'
+import { MindmapPlanError, readAgentMindmap } from './agentMindmap'
 import { runWorkflowStep, type WorkflowReporter } from './workflowTrace'
 
 type Message = { role: 'system' | 'user' | 'assistant'; content: string }
@@ -11,6 +12,7 @@ const instructions = `你是知识箱助手。只执行用户明确要求的知�
 {"type":"tool","tool":"find_notes","query":"标题的一个关键词"}
 {"type":"tool","tool":"read_notes","ids":["目录树中的真实ID"]}
 {"type":"tool","tool":"read_sources","ids":["原料ID"]}
+{"type":"tool","tool":"read_mindmap","nodeId":"真实笔记ID","query":"可选分支标题关键词"}
 {"type":"plan","summary":"更新笔记标题","operations":[{"kind":"rename","nodeId":"真实节点ID","title":"试验记录"}]}
 {"type":"answer","summary":"询问用户缺少的信息，或者回答无需修改的问题"}
 工具只读，找不到目标时先查询。如需改写正文或判断插图位置，先读取该笔记。需要理解完整原料时可读取原料正文，原料图可用文件名和识图摘录定位。
@@ -19,10 +21,12 @@ const instructions = `你是知识箱助手。只执行用户明确要求的知�
 {"kind":"rename","nodeId":"节点ID","title":"新标题"}
 {"kind":"move","nodeId":"节点ID","parentId":"节点ID或已创建的new:folder1"}
 {"kind":"mindmap","nodeId":"节点ID","tree":{"topic":"中心主题","children":[{"topic":"分支","linkNodeId":"可选真实节点ID","children":[]}]}}
+{"kind":"extend_mindmap","nodeId":"节点ID","branchId":"读取导图时提供的分支ID","children":[{"topic":"要补充的细节","note":"可选详细说明","children":[]}]}
 {"kind":"edit","nodeId":"节点ID","markdown":"编辑后的完整 Markdown，原有图片引用按需要保留"}
 {"kind":"edit","nodeId":"节点ID","find":"正文中唯一出现的原文","replacement":"替换后的文字"}
 {"kind":"insert_image","nodeId":"节点ID","sourceId":"原料图片ID","alt":"图注","after":"正文中唯一出现的标题或句子（省略表示文末）"}
-范围为整个知识库时 parentId 可为 null，表示根层级。使用已读取的 ID。创建父目录在前，移动在后。插图在正文编辑之后。导图更新是替换整张图。每项操作独立列出。
+范围为整个知识库时 parentId 可为 null，表示根层级。使用已读取的 ID。创建父目录在前，移动在后。插图在正文编辑之后。每项操作独立列出。
+用户要把已有脑图展开、细化叶子、补充小节时，先读取该笔记正文和导图。已有导图优先使用 extend_mindmap，选择真实的 branchId，依据正文给相关分支添加子分支，需要时把较长的细节放在 note。保留已有结构、标注和链接。mindmap 是新建或明确要求重做整图时的工具，单张最多 150 个节点和 11 层。extend_mindmap 每次操作最多新增 30 个节点、4 层，同张图一批最多新增 120 个节点。
 用户只要求其中部分操作时，保留其它内容。如果正文标记为截断，禁止提交完整正文替换，改用 find/replacement 或请用户指定段落。无法判断多个候选项时先询问。没有被授权的笔记、删除、系统命令、联网搜索都不在工具范围内。`
 
 const clip = (text: string, max: number) => text.length > max ? text.slice(0, max) + '\n[截断]' : text
@@ -110,6 +114,7 @@ export async function runKnowledgeAgent(options: {
     const choice = result.choices?.[0]
     return parseReply(choice?.message?.content, choice?.finish_reason)
   }
+  let repairedPlan = false
   for (let turn = 1; turn <= 8; turn++) {
     let next: Record<string, unknown>
     try {
@@ -124,20 +129,35 @@ export async function runKnowledgeAgent(options: {
       if (next.type === 'answer') return { note }
       if (!Array.isArray(next.operations)) throw new Error('模型未返回操作清单。')
       const operations = next.operations
-      const preview = await runWorkflowStep(report, 'validate', '检查修改方案',
-        () => buildAgentPreview(snapshot, command, note, operations),
-        (result) => `${result.items.length} 项修改`)
-      return { note, preview }
+      try {
+        const preview = await runWorkflowStep(report, 'validate-' + turn, '检查修改方案',
+          () => buildAgentPreview(snapshot, command, note, operations),
+          (result) => `${result.items.length} 项修改`)
+        return { note, preview }
+      } catch (error) {
+        if (!(error instanceof MindmapPlanError) || repairedPlan || turn === 8) throw error
+        repairedPlan = true
+        messages.push({ role: 'user', content: `上次导图方案未通过检查：${error.message}\n请保持原任务，修正方案。可以先调用 read_mindmap。若已有导图，优先按分支追加，不要重写整张图。` })
+        report({ id: 'repair', label: '已反馈导图校验错误', state: 'done', detail: error.message })
+        continue
+      }
     }
     if (next.type !== 'tool') throw new Error('模型返回的操作类型无效。')
     const tool = next.tool
-    const toolNames = { find_notes: '查找笔记', read_notes: '读取正文、导图和原料列表', read_sources: '读取原料正文' }
-    if (tool !== 'find_notes' && tool !== 'read_notes' && tool !== 'read_sources') throw new Error('模型请求了未授权的工具。')
+    const toolNames = { find_notes: '查找笔记', read_notes: '读取正文、导图和原料列表', read_sources: '读取原料正文', read_mindmap: '读取导图分支' }
+    if (tool !== 'find_notes' && tool !== 'read_notes' && tool !== 'read_sources' && tool !== 'read_mindmap') {
+      throw new Error('模型请求了未授权的工具。')
+    }
     const result = await runWorkflowStep(report, 'tool-' + turn, toolNames[tool], () => {
       if (tool === 'find_notes') {
         if (typeof next.query !== 'string' || !next.query.trim()) throw new Error('搜索关键词为空。')
         const query = next.query.trim().toLocaleLowerCase()
         return titles.filter(({ title }) => title.toLocaleLowerCase().includes(query)).slice(0, 30)
+      }
+      if (tool === 'read_mindmap') {
+        if (typeof next.nodeId !== 'string' || !known.has(next.nodeId)) throw new Error('笔记超出授权范围。')
+        const query = typeof next.query === 'string' ? next.query.trim().toLocaleLowerCase() : ''
+        return readAgentMindmap(snapshot.maps.get(next.nodeId)?.data, query)
       }
       if (!Array.isArray(next.ids) || next.ids.length < 1 || next.ids.length > 5) throw new Error('每次读取须指定 1–5 项资料。')
       return next.ids.map((id: unknown) => {
@@ -152,6 +172,7 @@ export async function runKnowledgeAgent(options: {
         return {
           ...node, markdown: clip(snapshot.details.get(id)?.markdown ?? '', 16000),
           outline: outlineFromMindElixir(snapshot.maps.get(id)?.data, 50),
+          branches: readAgentMindmap(snapshot.maps.get(id)?.data, '', 55),
           sources: [...snapshot.sources.values()].filter((source) => source.nodeId === id && source.usage !== 'detail-image')
             .slice(0, 40).map((source) => ({ id: source.id, name: source.name, kind: source.kind })),
           children: titles.filter((item) => item.parentId === id).slice(0, 60),
