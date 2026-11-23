@@ -38,7 +38,13 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
     if (preserveResize && oldWidth && oldHeight) {
       for (const target of [camera, goal]) {
         if (!target) continue
-        target.x += (width - oldWidth) / 2
+        const selection = active?.headings.length && target.zoom / fitZoom > 1.45 && point(active, target)
+        if (selection && selection.x >= 0 && selection.x <= oldWidth) {
+          const x = selection.x * width / oldWidth
+          target.x += branchViewportX(x) - selection.x
+        } else {
+          target.x += (width - oldWidth) / 2
+        }
         target.y += (height - oldHeight) / 2
       }
     } else fit(false)
@@ -153,9 +159,9 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
       .force('cluster-y', forceY(node => node.ay).strength(.105))
   }
 
-  const point = node => ({
-    x: node.x * camera.zoom + camera.x,
-    y: node.y * camera.zoom + camera.y,
+  const point = (node, view = camera) => ({
+    x: node.x * view.zoom + view.x,
+    y: node.y * view.zoom + view.y,
   })
   const radius = node => clamp((node.depth === 0 ? 8 : node.children.length ? 6.5 : 3.8) * Math.sqrt(camera.zoom), 2, 13)
   function paintEdges(focal) {
@@ -181,6 +187,14 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
 
   const overlaps = (a, b) =>
     a.x < b.x + b.w + 4 && a.x + a.w > b.x - 4 && Math.abs(a.y - b.y) < 15
+  const around = (origin, angle, distance) => ({
+    x: origin.x + Math.cos(angle) * distance,
+    y: origin.y + Math.sin(angle) * distance,
+  })
+  const branchViewportX = x => {
+    const margin = Math.min(width * .42, 174)
+    return clamp(x, margin, width - margin)
+  }
 
   function paintHeadings(node, level) {
     headingHits = []
@@ -193,38 +207,60 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
 
     const origin = point(node)
     if (branchLayout?.node !== node) {
-      branchLayout = { node, direction: origin.x < width / 2 ? 1 : -1 }
+      const parent = graph.nodes.get(node.parentId)
+      const gapAngle = parent
+        ? Math.atan2(parent.y - node.y, parent.x - node.x)
+        : origin.x < width / 2 ? Math.PI : 0
+      branchLayout = { node, gapAngle }
     }
-    const { direction } = branchLayout
-    const column = clamp(width * .24, 102, 166)
-    const firstX = origin.x + direction * clamp(width * .1, 39, 90)
-    const secondX = firstX + direction * column
-    const sectionGap = 30
-    const subsectionGap = 24 * subsectionAlpha
-    const heightOf = heading => heading.level === 2
-      ? sectionGap + heading.children.length * subsectionGap
-      : subsectionGap
-    const total = node.headings.reduce((sum, heading) => sum + heightOf(heading), 0)
-    let row = origin.y - total / 2
+    const count = node.headings.length
+    const gap = clamp(TAU / (count + 1) * 1.4, Math.PI / 5, Math.PI)
+    const step = count > 1 ? (TAU - gap) / (count - 1) : 0
+    const firstAngle = branchLayout.gapAngle + (count > 1 ? gap / 2 : Math.PI)
+    const ring = Math.max(clamp(Math.min(width, height) * .19, 66, 112), count * 5.5)
+    const labels = []
 
-    function branch(heading, from, to, alpha) {
-      if (!alpha || to.y < -24 || to.y > height + 24) return
+    function branch(heading, from, to, angle, alpha) {
+      if (!alpha) return
       const isSection = heading.level === 2
       ctx.globalAlpha = alpha
       ctx.strokeStyle = isSection ? '#859b8e' : '#a2b1a8'
       ctx.lineWidth = isSection ? 1.15 : .9
       ctx.beginPath()
       ctx.moveTo(from.x, from.y)
-      const mid = (from.x + to.x) / 2
-      ctx.bezierCurveTo(mid, from.y, mid, to.y, to.x, to.y)
+      ctx.lineTo(to.x, to.y)
       ctx.stroke()
       ctx.fillStyle = isSection ? '#456854' : '#6a8375'
       ctx.beginPath()
       ctx.arc(to.x, to.y, isSection ? 4 : 3, 0, TAU)
       ctx.fill()
+      if (to.x < -10 || to.y < -10 || to.x > width + 10 || to.y > height + 10) return
+      labels.push({ heading, to, angle, alpha })
+    }
 
+    for (const [index, heading] of node.headings.entries()) {
+      const angle = firstAngle + index * step
+      const section = around(origin, angle, ring)
+      const isSection = heading.level === 2
+      branch(heading, origin, section, angle, isSection ? sectionAlpha : subsectionAlpha)
+      if (!subsectionAlpha || heading.children.length === 0) continue
+      const children = heading.children
+      const span = Math.min(step * .74 || Math.PI * .78, Math.PI * .78)
+      const childStep = children.length > 1 ? Math.min(.38, span / (children.length - 1)) : 0
+      const outerRing = Math.max(ring + 74, 24 / (childStep || 1))
+      children.forEach((child, childIndex) => {
+        const childAngle = angle + (childIndex - (children.length - 1) / 2) * childStep
+        branch(child, section, around(origin, childAngle, outerRing), childAngle, subsectionAlpha)
+      })
+    }
+
+    // Section labels take priority when an outer branch runs close to the first ring.
+    labels.sort((a, b) => a.heading.level - b.heading.level)
+    const occupied = []
+    for (const { heading, to, angle, alpha } of labels) {
+      const isSection = heading.level === 2
       ctx.font = `${isSection ? 600 : 400} 12px "Microsoft YaHei", sans-serif`
-      const maxWidth = isSection ? column - 19 : 188
+      const maxWidth = clamp(width * .28, 96, 180)
       const fullTitle = heading.title
       let label = fullTitle
       if (ctx.measureText(label).width > maxWidth) {
@@ -236,34 +272,28 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
         label = prefix + '…'
       }
       const w = ctx.measureText(label).width
-      const x = direction > 0 ? to.x + 8 : to.x - w - 8
+      const sides = [to.x + 8, to.x - w - 8]
+      if (Math.cos(angle) < 0) sides.reverse()
       const y = to.y + 4
-      ctx.strokeStyle = '#fafbf9'
-      ctx.lineWidth = 3
-      ctx.strokeText(label, x, y)
-      ctx.fillText(label, x, y)
-      if (alpha > .15) headingHits.push({ node, heading, ...to, labelX: x, w })
-    }
-
-    for (const heading of node.headings) {
-      const span = heightOf(heading)
-      const y = row + span / 2
-      if (heading.level === 2) {
-        const section = { x: firstX, y }
-        branch(heading, origin, section, sectionAlpha)
-        if (subsectionAlpha) heading.children.forEach((child, index) => {
-          const childY = y + (index - (heading.children.length - 1) / 2) * subsectionGap
-          branch(child, section, { x: secondX, y: childY }, subsectionAlpha)
-        })
-      } else {
-        branch(heading, origin, { x: firstX, y }, subsectionAlpha)
+      const box = sides.map(x => ({ x, y, w })).find(candidate =>
+        candidate.x >= 4 && candidate.x + w <= width - 4 &&
+        !occupied.some(other => overlaps(candidate, other)))
+      if (box) {
+        occupied.push(box)
+        ctx.globalAlpha = alpha
+        ctx.fillStyle = isSection ? '#456854' : '#6a8375'
+        ctx.strokeStyle = '#fafbf9'
+        ctx.lineWidth = 3
+        ctx.strokeText(label, box.x, y)
+        ctx.fillText(label, box.x, y)
       }
-      row += span
+      if (alpha > .15) headingHits.push({ node, heading, ...to, labelX: box?.x, w: box ? w : 0 })
     }
     ctx.globalAlpha = 1
+    return occupied
   }
 
-  function paintNodes(focal) {
+  function paintNodes(focal, headingLabels = []) {
     const captions = []
     const adjacent = new Set(focal ? [...focal.links.keys()].filter(id => {
       const link = focal.links.get(id)
@@ -298,9 +328,11 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
       const w = ctx.measureText(label).width
       const x = p.x + r + w + 12 < width ? p.x + r + 8 : p.x - r - w - 8
       const y = p.y - (isActive ? 13 : 2)
+      const box = { x, y, w }
       if (p.y < 70 || p.y > height - 38 || x < 5 ||
-          filled.some(box => overlaps({ x, y, w }, box))) continue
-      filled.push({ x, y, w })
+          (!isActive && headingLabels.some(entry => overlaps(box, entry))) ||
+          filled.some(entry => overlaps(box, entry))) continue
+      filled.push(box)
       ctx.globalAlpha = alpha
       ctx.strokeStyle = '#fafbf9'
       ctx.lineWidth = 3.4
@@ -327,8 +359,8 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
     ctx.setTransform(resolution, 0, 0, resolution, 0, 0)
     ctx.clearRect(0, 0, width, height)
     paintEdges(focal)
-    paintHeadings(active, camera.zoom / fitZoom)
-    paintNodes(focal)
+    const headingLabels = paintHeadings(active, camera.zoom / fitZoom)
+    paintNodes(focal, headingLabels)
   }
   frame = requestAnimationFrame(render)
 
@@ -350,7 +382,7 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
   function hitHeading(p) {
     return headingHits.find(({ x, y, labelX, w }) =>
       Math.hypot(p.x - x, p.y - y) <= 9 ||
-      (Math.abs(p.y - y) <= 9 && p.x >= labelX - 3 && p.x <= labelX + w + 3))
+      (w > 0 && Math.abs(p.y - y) <= 9 && p.x >= labelX - 3 && p.x <= labelX + w + 3))
   }
 
   function pinchGeometry() {
@@ -437,9 +469,15 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
   }, { passive: false })
 
   function zoomSelection(scale) {
-    const p = active?.headings.length ? point(active) : null
+    const p = active?.headings.length ? point(active, goal ?? camera) : null
     const visible = p && p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height
     zoomAt(visible ? p.x : width / 2, visible ? p.y : height / 2, scale, true)
+    if (visible && scale > 1 && (goal ?? camera).zoom / fitZoom > 1.45) {
+      const view = goal ?? camera
+      const marginY = Math.min(height * .4, 180)
+      view.x += branchViewportX(p.x) - p.x
+      view.y += clamp(p.y, marginY, height - marginY) - p.y
+    }
   }
 
   return {
