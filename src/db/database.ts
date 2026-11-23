@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { defaultAppSettings } from '../config'
+import type { AgentBatch } from './agentTypes'
 import type {
   AppSettings,
   DetailDoc,
@@ -25,6 +26,7 @@ export class KnowledgeBoxDB extends Dexie {
   details!: EntityTable<DetailDoc, 'nodeId'>
   snapshots!: EntityTable<Snapshot, 'id'>
   settings!: EntityTable<AppSettings, 'id'>
+  agentBatches!: EntityTable<AgentBatch, 'id'>
 
   constructor() {
     super('knowledge-box')
@@ -36,6 +38,7 @@ export class KnowledgeBoxDB extends Dexie {
       snapshots: 'id, nodeId, createdAt',
       settings: 'id',
     })
+    this.version(2).stores({ agentBatches: 'id' })
   }
 }
 

@@ -13,6 +13,7 @@ import { extractFromFile } from '../lib/extractText'
 import { ensureLeadingH1 } from '../lib/ensureLeadingH1'
 import { normalizeMathMarkdown } from '../lib/normalizeMathMarkdown'
 import { runOrganize } from '../lib/organize'
+import { runWorkflowStep, type WorkflowReporter } from '../lib/workflowTrace'
 import {
   assertNoAncestorPairs,
   commonParentId,
@@ -38,6 +39,7 @@ export function useKnowledgeStore() {
     /** 叶子整理或上级归类的目录标题 */
     nodeTitle?: string
     childIds?: string[]
+    target?: { id: string; updatedAt: number; markdown: string }
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -363,7 +365,7 @@ export function useKnowledgeStore() {
   }, [])
 
   const startOrganize = useCallback(
-    async (opts?: { titleMode?: 'ai' | 'manual'; manualTitle?: string }) => {
+    async (opts?: { titleMode?: 'ai' | 'manual'; manualTitle?: string }, report?: WorkflowReporter) => {
       if (!selected) return
       if (parsing) {
         setError('文件还在解析中，请稍后再点「开始整理」')
@@ -378,11 +380,13 @@ export function useKnowledgeStore() {
       setOrganizing(true)
       setError(null)
       try {
-        const currentSources = await db.sources
+        const [currentSources, target, currentDetail] = await runWorkflowStep(report, 'read', '读取当前笔记与原料', () => Promise.all([db.sources
           .where('nodeId')
           .equals(selected.id)
           .filter((source) => source.usage !== 'detail-image')
-          .toArray()
+          .toArray(), db.nodes.get(selected.id), db.details.get(selected.id)]),
+          ([sources]) => `${selected.title} · ${sources.length} 份原料`)
+        if (!target) throw new Error('当前笔记已不存在。')
         if (!currentSources.length) {
           throw new Error(
             '当前节点还没有原料。请先拖入图片/PDF/Word/HTML，等「原料」页出现内容后再整理。',
@@ -414,7 +418,8 @@ export function useKnowledgeStore() {
           nodeTitle: selected.title,
           prompt,
           sources: currentSources,
-          existingMarkdown: detail?.markdown,
+          existingMarkdown: currentDetail?.markdown,
+          report,
           fixedTitle: titleMode === 'manual' ? manualTitle : undefined,
         })
         setPreview({
@@ -422,16 +427,19 @@ export function useKnowledgeStore() {
           ...result,
           prompt,
           nodeTitle: result.preview.title || manualTitle || selected.title,
+          target: { id: target.id, updatedAt: target.updatedAt, markdown: currentDetail?.markdown ?? '' },
         })
+        report?.({ id: 'review', label: '等待确认方案', state: 'waiting' })
         setStatus(null)
       } catch (e) {
+        report?.({ id: 'result', label: '未能生成整理方案', state: 'failed' })
         setError(e instanceof Error ? e.message : String(e))
         setStatus(null)
       } finally {
         setOrganizing(false)
       }
     },
-    [selected, settings, prompt, detail?.markdown, parsing],
+    [selected, settings, prompt, parsing],
   )
 
   const toggleClassifyMode = useCallback(() => {
@@ -450,7 +458,7 @@ export function useKnowledgeStore() {
   const clearChecked = useCallback(() => setCheckedIds([]), [])
 
   const startRollup = useCallback(
-    async (opts?: { titleMode?: 'ai' | 'manual'; manualTitle?: string }) => {
+    async (opts?: { titleMode?: 'ai' | 'manual'; manualTitle?: string }, report?: WorkflowReporter) => {
       if (checkedIds.length < 2) {
         setError('请至少勾选 2 个节点')
         return
@@ -464,32 +472,27 @@ export function useKnowledgeStore() {
       setOrganizing(true)
       setError(null)
       try {
-        const all = await db.nodes.toArray()
-        assertNoAncestorPairs(all, checkedIds)
+        const children = await runWorkflowStep(report, 'read', '读取勾选节点的正文和导图', async () => {
+          const all = await db.nodes.toArray()
+          assertNoAncestorPairs(all, checkedIds)
+          return Promise.all(checkedIds.map(async (id) => {
+            const node = all.find((n) => n.id === id)
+            if (!node) throw new Error('有勾选的节点已不存在，请重新选择。')
+            const [detail, map] = await Promise.all([db.details.get(id), db.mindmaps.get(id)])
+            return { id, title: node.title, markdown: detail?.markdown ?? '', mindmapOutline: outlineFromMindElixir(map?.data) }
+          }))
+        }, (items) => `${items.length} 个节点`)
         setStatus(
           titleMode === 'manual'
             ? `正在按标题「${manualTitle}」生成概况与总览导图…`
             : '正在总结标题并生成上级概况与总览导图…',
         )
-        const children = []
-        for (const id of checkedIds) {
-          const node = all.find((n) => n.id === id)
-          if (!node) continue
-          const d = await db.details.get(id)
-          const m = await db.mindmaps.get(id)
-          children.push({
-            id,
-            title: node.title,
-            markdown: d?.markdown ?? '',
-            mindmapOutline: outlineFromMindElixir(m?.data),
-          })
-        }
-        const result = await runRollupOrganize({
+        const result = await runWorkflowStep(report, 'model', '调用模型生成归类方案', () => runRollupOrganize({
           settings,
           children,
           prompt,
           fixedTitle: titleMode === 'manual' ? manualTitle : undefined,
-        })
+        }), () => settings.modelName)
         setPreview({
           mode: 'rollup',
           preview: result.preview,
@@ -498,8 +501,10 @@ export function useKnowledgeStore() {
           nodeTitle: result.title,
           childIds: children.map((c) => c.id),
         })
+        report?.({ id: 'review', label: '等待确认方案', state: 'waiting' })
         setStatus(null)
       } catch (e) {
+        report?.({ id: 'result', label: '未能生成归类方案', state: 'failed' })
         setError(e instanceof Error ? e.message : String(e))
         setStatus(null)
       } finally {
@@ -590,44 +595,45 @@ export function useKnowledgeStore() {
         return
       }
 
-      if (!selected) return
-      const title = (
-        opts.title?.trim() ||
-        preview.nodeTitle ||
-        preview.preview.title ||
-        selected.title
-      ).trim()
-      await db.snapshots.add({
-        id: crypto.randomUUID(),
-        nodeId: selected.id,
-        mindmap: mindmap?.data ?? null,
-        markdown: detail?.markdown ?? '',
-        prompt: preview.prompt,
-        createdAt: now,
+      const target = preview.target
+      if (!target) throw new Error('找不到这次整理的目标笔记，请重新生成方案。')
+      await db.transaction('rw', [db.nodes, db.details, db.mindmaps, db.snapshots], async () => {
+        const current = await db.nodes.get(target.id)
+        const detailBefore = await db.details.get(target.id)
+        if (!current || current.updatedAt !== target.updatedAt || (detailBefore?.markdown ?? '') !== target.markdown) {
+          throw new Error('原笔记在生成方案后已改动，请取消当前方案并重新整理。')
+        }
+        const title = (opts.title?.trim() || preview.nodeTitle || preview.preview.title || current.title).trim()
+        const previousMindmap = await db.mindmaps.get(target.id)
+        await db.snapshots.add({
+          id: crypto.randomUUID(),
+          nodeId: target.id,
+          mindmap: previousMindmap?.data ?? null,
+          markdown: detailBefore?.markdown ?? '',
+          prompt: preview.prompt,
+          createdAt: now,
+        })
+        if (opts.mindmap) {
+          await db.mindmaps.put({
+            nodeId: target.id,
+            data: patchMindElixirTopic(preview.mindElixirData, title),
+            updatedAt: now,
+          })
+        }
+        if (opts.detail) {
+          await db.details.put({
+            nodeId: target.id,
+            markdown: ensureLeadingH1(normalizeMathMarkdown(preview.preview.markdown), title),
+            updatedAt: now,
+          })
+        }
+        await db.nodes.update(target.id, { title, updatedAt: now })
       })
-
-      if (opts.mindmap) {
-        await db.mindmaps.put({
-          nodeId: selected.id,
-          data: patchMindElixirTopic(preview.mindElixirData, title),
-          updatedAt: now,
-        })
-      }
-      if (opts.detail) {
-        await db.details.put({
-          nodeId: selected.id,
-          markdown: ensureLeadingH1(
-            normalizeMathMarkdown(preview.preview.markdown),
-            title,
-          ),
-          updatedAt: now,
-        })
-      }
-      await db.nodes.update(selected.id, { title, updatedAt: now })
+      setSelectedId(target.id)
       setPreview(null)
       setActiveTab(opts.detail ? 'detail' : 'mindmap')
     },
-    [selected, preview, mindmap?.data, detail?.markdown],
+    [preview],
   )
 
   const exportBackup = useCallback(async () => {

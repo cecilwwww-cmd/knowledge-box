@@ -5,6 +5,7 @@ import {
 } from './detailTemplates'
 import { ensureLeadingH1 } from './ensureLeadingH1'
 import { normalizeMathMarkdown } from './normalizeMathMarkdown'
+import { runWorkflowStep, type WorkflowReporter } from './workflowTrace'
 
 type ChatContent =
   | string
@@ -154,6 +155,7 @@ export async function runOrganize(options: {
   existingMindmapSummary?: string
   /** 用户自命名；不传则由模型总结 title */
   fixedTitle?: string
+  report?: WorkflowReporter
 }): Promise<{ preview: OrganizePreview; mindElixirData: unknown }> {
   const { settings, nodeTitle, prompt, sources, fixedTitle } = options
 
@@ -194,14 +196,14 @@ ${detailTemplatePromptGuide(detailTpl)}
 ${manualTitle ? `用户已指定目录标题「${manualTitle}」：title 与 mindmap.topic 必须使用该标题。` : '请根据原料总结 title（目录名），mindmap.topic 可与 title 一致或略完整。'}
 公式必须用 KaTeX 兼容写法：行内 $E=IR$，独立公式用 $$...$$（不要用 [ ] 或 \\[ \\] 包公式）。`
 
-  const userContent = await buildUserContent(
+  const userContent = await runWorkflowStep(options.report, 'prepare', '准备模型输入', () => buildUserContent(
     nodeTitle,
     prompt,
     sources,
     options.existingMarkdown,
     sendImages,
     manualTitle,
-  )
+  ))
 
   const base = settings.apiBaseUrl.replace(/\/$/, '')
   const body: Record<string, unknown> = {
@@ -218,27 +220,29 @@ ${manualTitle ? `用户已指定目录标题「${manualTitle}」：title 与 min
     body.reasoning_effort = 'none'
   }
 
-  const res = await fetch(`${base}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${settings.apiKey}`,
-    },
-    body: JSON.stringify(body),
-  })
+  const data = await runWorkflowStep(options.report, 'model', '调用模型', async () => {
+    const res = await fetch(`${base}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${settings.apiKey}`,
+      },
+      body: JSON.stringify(body),
+    })
 
-  if (!res.ok) {
-    const errText = await res.text()
-    if (Array.isArray(userContent) && /image|vision|multimodal|不支持|invalid/i.test(errText)) {
-      throw new Error(
-        `当前模型「${settings.modelName}」未接受图片。识图请使用 deepseek-flash，Base URL 填 https://api.deepseek.com/v1。原始错误：${errText.slice(0, 180)}`,
-      )
+    if (!res.ok) {
+      const errText = await res.text()
+      if (Array.isArray(userContent) && /image|vision|multimodal|不支持|invalid/i.test(errText)) {
+        throw new Error(
+          `当前模型「${settings.modelName}」未接受图片。识图请使用 deepseek-flash，Base URL 填 https://api.deepseek.com/v1。原始错误：${errText.slice(0, 180)}`,
+        )
+      }
+      throw new Error(`模型请求失败 (${res.status}): ${errText.slice(0, 300)}`)
     }
-    throw new Error(`模型请求失败 (${res.status}): ${errText.slice(0, 300)}`)
-  }
 
-  const data = await res.json()
-  return parseOrganizeResponse(data, manualTitle)
+    return res.json()
+  }, () => settings.modelName)
+  return runWorkflowStep(options.report, 'parse', '解析标题、导图和正文', () => parseOrganizeResponse(data, manualTitle))
 }
 
 function parseOrganizeResponse(

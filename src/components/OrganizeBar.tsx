@@ -9,9 +9,11 @@ interface Props {
   onOrganize: (options: { titleMode: 'ai' | 'manual'; manualTitle?: string }) => void
   organizing: boolean
   disabled?: boolean
+  promptPlaceholder?: string
+  agent?: boolean
 }
 
-export function OrganizeBar({ prompt, onPromptChange, onFiles, onOrganize, organizing, disabled }: Props) {
+export function OrganizeBar({ prompt, onPromptChange, onFiles, onOrganize, organizing, disabled, promptPlaceholder, agent }: Props) {
   const fileInput = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [manual, setManual] = useState(false)
@@ -30,7 +32,7 @@ export function OrganizeBar({ prompt, onPromptChange, onFiles, onOrganize, organ
         }}
         onSubmit={(event) => {
           event.preventDefault()
-          if (!unavailable && (!manual || title.trim())) {
+          if (!unavailable && (!manual || title.trim()) && (!agent || prompt.trim())) {
             onOrganize({ titleMode: manual ? 'manual' : 'ai', manualTitle: title.trim() })
           }
         }}
@@ -72,20 +74,23 @@ export function OrganizeBar({ prompt, onPromptChange, onFiles, onOrganize, organ
               event.currentTarget.value = ''
             }} />
           <input className="prompt-input" aria-label="汇总提示词"
-            placeholder="输入汇总提示词，或直接 Ctrl+V 粘贴截图 / 文字原料…"
+            placeholder={promptPlaceholder ?? '输入汇总提示词，或直接 Ctrl+V 粘贴截图 / 文字原料…'}
             value={prompt} disabled={unavailable} onChange={(event) => onPromptChange(event.target.value)}
             onPaste={(event) => {
+              if (agent && !event.clipboardData.files.length &&
+                  !Array.from(event.clipboardData.items).some((item) => item.kind === 'file')) return
               const files = filesFromClipboard(event.clipboardData)
               if (!files.length) return
               event.preventDefault()
               ingest(files)
             }} />
-          <button type="button" className="organize-title-mode" aria-pressed={manual} disabled={unavailable}
+          {!agent && <button type="button" className="organize-title-mode" aria-pressed={manual} disabled={unavailable}
             title={manual ? '切换为 AI 命名' : '切换为自定义标题'} onClick={() => setManual(!manual)}>
             <UiIcon name="sparkle" />{manual ? '自定义标题' : 'AI 命名'}
-          </button>
+          </button>}
           <button type="submit" className="organize-btn" title={organizing ? '整理中…' : '开始整理'}
-            disabled={unavailable || (manual && !title.trim())} aria-label={organizing ? '整理中' : '开始整理'}>
+            disabled={unavailable || (manual && !title.trim()) || (agent && !prompt.trim())}
+            aria-label={organizing ? '整理中' : agent ? '发送指令' : '开始整理'}>
             <UiIcon name="arrow" />
           </button>
         </div>
