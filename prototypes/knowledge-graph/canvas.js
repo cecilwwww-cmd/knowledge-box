@@ -19,7 +19,7 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
   let width = 0, height = 0, resolution = 1
   let camera = { x: 0, y: 0, zoom: 1 }, goal = null
   let fitZoom = 1, clickTimer
-  const snippets = new WeakMap()
+  let headingHits = [], branchLayout
   let layout, last = 0, frame
   const events = new AbortController()
   const on = (name, listener, options) => canvas.addEventListener(name, listener, { ...options, signal: events.signal })
@@ -97,6 +97,8 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
     edges = graph.edges.filter(edge => !scope || scope.has(edge.from.id) && scope.has(edge.to.id))
     layout = makeLayout()
     hover = null
+    headingHits = []
+    branchLayout = null
     tooltip.hidden = true
     if (fitView) fit()
   }
@@ -177,87 +179,86 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
     ctx.setLineDash([])
   }
 
-  function nodeSnippet(node) {
-    let cached = snippets.get(node)
-    if (cached) return cached
-    const body = (node.markdown || '')
-      .replace(/!\[[^\]\n]*\]\((?:data:image\/|#kb-image-)[^\s)]+\)/g, '')
-      .split('\n')
-      .map(line => line.trim().replace(/^(?:#{1,6}|[-*])\s+/, '').replaceAll('**', ''))
-      .filter(line => line && line !== node.title && !line.startsWith('```'))
-      .slice(0, 12)
-    const branches = []
-    const root = node.mindmap
-    if (typeof root?.note === 'string' && root.note.trim()) branches.push(root.note)
-    const pending = Array.isArray(root?.children) ? [...root.children].reverse() : []
-    while (pending.length && branches.length < 12) {
-      const branch = pending.pop()
-      if (typeof branch?.topic === 'string' && branch.topic.trim()) {
-        const note = typeof branch.note === 'string' ? branch.note.trim() : ''
-        branches.push(note ? `${branch.topic}：${note}` : branch.topic)
-      }
-      if (Array.isArray(branch?.children)) pending.push(...[...branch.children].reverse())
-    }
-    cached = { body, branches }
-    snippets.set(node, cached)
-    return cached
-  }
-
-  function wrapLines(lines, maxWidth, maxLines) {
-    const result = []
-    for (const value of lines) {
-      let row = ''
-      for (const char of value.slice(0, 800)) {
-        if (row && ctx.measureText(row + char).width > maxWidth) {
-          result.push(row)
-          if (result.length === maxLines) return result
-          row = ''
-        }
-        row += char
-      }
-      if (row.trim()) result.push(row)
-      if (result.length === maxLines) return result
-    }
-    return result
-  }
-
   const overlaps = (a, b) =>
     a.x < b.x + b.w + 4 && a.x + a.w > b.x - 4 && Math.abs(a.y - b.y) < 15
 
-  function paintContent(captions, used, level) {
-    if (level < 1.5) return
-    ctx.font = '12px "Microsoft YaHei", sans-serif'
-    const lineWidth = clamp(111 + level * 27, 150, Math.min(265, width * .52))
-    for (const { node, p, x, y, priority } of captions) {
-      const { body, branches } = nodeSnippet(node)
-      const strong = priority >= 4
-      const right = x + lineWidth < width - 18
-      const left = right ? x : p.x - lineWidth - 15
-      if (left < 12 || y < 78) continue
-      const rowLimit = strong ? 5 : 3
-      const rows = [
-        ...wrapLines(body, lineWidth, rowLimit).map((line, index) => ({
-          line, color: '#4c5750', threshold: (strong ? 1.50 : 1.73) + index * .23,
-        })),
-        ...wrapLines(branches, lineWidth, rowLimit).map((line, index) => ({
-          line, color: node.color, threshold: (strong ? 2.45 : 2.72) + index * .23,
-        })),
-      ]
-      let offset = 17
-      for (const row of rows) {
-        const alpha = fade(level, row.threshold, row.threshold + .36)
-        if (!alpha) continue
-        const box = { x: left, y: y + offset, w: ctx.measureText(row.line).width }
-        if (box.y > height - 48 || used.some(entry => overlaps(box, entry))) break
-        used.push(box)
-        ctx.globalAlpha = alpha * (strong ? .95 : .78)
-        ctx.strokeStyle = '#fafbf9'
-        ctx.lineWidth = 3
-        ctx.strokeText(row.line, box.x, box.y)
-        ctx.fillStyle = row.color
-        ctx.fillText(row.line, box.x, box.y)
-        offset += 16
+  function paintHeadings(node, level) {
+    headingHits = []
+    const sectionAlpha = fade(level, 1.45, 2.05)
+    const subsectionAlpha = fade(level, 2.45, 3.25)
+    if (!sectionAlpha || !node?.headings.length) {
+      branchLayout = null
+      return
+    }
+
+    const origin = point(node)
+    if (branchLayout?.node !== node) {
+      branchLayout = { node, direction: origin.x < width / 2 ? 1 : -1 }
+    }
+    const { direction } = branchLayout
+    const column = clamp(width * .24, 102, 166)
+    const firstX = origin.x + direction * clamp(width * .1, 39, 90)
+    const secondX = firstX + direction * column
+    const sectionGap = 30
+    const subsectionGap = 24 * subsectionAlpha
+    const heightOf = heading => heading.level === 2
+      ? sectionGap + heading.children.length * subsectionGap
+      : subsectionGap
+    const total = node.headings.reduce((sum, heading) => sum + heightOf(heading), 0)
+    let row = origin.y - total / 2
+
+    function branch(heading, from, to, alpha) {
+      if (!alpha || to.y < -24 || to.y > height + 24) return
+      const isSection = heading.level === 2
+      ctx.globalAlpha = alpha
+      ctx.strokeStyle = isSection ? '#859b8e' : '#a2b1a8'
+      ctx.lineWidth = isSection ? 1.15 : .9
+      ctx.beginPath()
+      ctx.moveTo(from.x, from.y)
+      const mid = (from.x + to.x) / 2
+      ctx.bezierCurveTo(mid, from.y, mid, to.y, to.x, to.y)
+      ctx.stroke()
+      ctx.fillStyle = isSection ? '#456854' : '#6a8375'
+      ctx.beginPath()
+      ctx.arc(to.x, to.y, isSection ? 4 : 3, 0, TAU)
+      ctx.fill()
+
+      ctx.font = `${isSection ? 600 : 400} 12px "Microsoft YaHei", sans-serif`
+      const maxWidth = isSection ? column - 19 : 188
+      const fullTitle = heading.title
+      let label = fullTitle
+      if (ctx.measureText(label).width > maxWidth) {
+        let prefix = ''
+        for (const char of fullTitle) {
+          if (ctx.measureText(prefix + char + '…').width > maxWidth) break
+          prefix += char
+        }
+        label = prefix + '…'
       }
+      const w = ctx.measureText(label).width
+      const x = direction > 0 ? to.x + 8 : to.x - w - 8
+      const y = to.y + 4
+      ctx.strokeStyle = '#fafbf9'
+      ctx.lineWidth = 3
+      ctx.strokeText(label, x, y)
+      ctx.fillText(label, x, y)
+      if (alpha > .15) headingHits.push({ node, heading, ...to, labelX: x, w })
+    }
+
+    for (const heading of node.headings) {
+      const span = heightOf(heading)
+      const y = row + span / 2
+      if (heading.level === 2) {
+        const section = { x: firstX, y }
+        branch(heading, origin, section, sectionAlpha)
+        if (subsectionAlpha) heading.children.forEach((child, index) => {
+          const childY = y + (index - (heading.children.length - 1) / 2) * subsectionGap
+          branch(child, section, { x: secondX, y: childY }, subsectionAlpha)
+        })
+      } else {
+        branch(heading, origin, { x: firstX, y }, subsectionAlpha)
+      }
+      row += span
     }
     ctx.globalAlpha = 1
   }
@@ -290,8 +291,6 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
     }
     captions.sort((a, b) => b.priority - a.priority)
     const filled = []
-    const visibleCaptions = []
-    const level = camera.zoom / fitZoom
     for (const { node, p, r, priority, alpha } of captions) {
       const label = node.title.length > 17 ? node.title.slice(0, 16) + '…' : node.title
       const isActive = priority >= 4
@@ -302,7 +301,6 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
       if (p.y < 70 || p.y > height - 38 || x < 5 ||
           filled.some(box => overlaps({ x, y, w }, box))) continue
       filled.push({ x, y, w })
-      visibleCaptions.push({ node, p, x, y, priority })
       ctx.globalAlpha = alpha
       ctx.strokeStyle = '#fafbf9'
       ctx.lineWidth = 3.4
@@ -312,7 +310,6 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
       ctx.fillText(label, x, y)
     }
     ctx.globalAlpha = 1
-    paintContent(visibleCaptions, filled, level)
   }
 
   function render(time) {
@@ -330,6 +327,7 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
     ctx.setTransform(resolution, 0, 0, resolution, 0, 0)
     ctx.clearRect(0, 0, width, height)
     paintEdges(focal)
+    paintHeadings(active, camera.zoom / fitZoom)
     paintNodes(focal)
   }
   frame = requestAnimationFrame(render)
@@ -347,6 +345,12 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
       if (distance < near && distance <= Math.max(12, radius(node) + 5)) { best = node; near = distance }
     }
     return best
+  }
+
+  function hitHeading(p) {
+    return headingHits.find(({ x, y, labelX, w }) =>
+      Math.hypot(p.x - x, p.y - y) <= 9 ||
+      (Math.abs(p.y - y) <= 9 && p.x >= labelX - 3 && p.x <= labelX + w + 3))
   }
 
   function pinchGeometry() {
@@ -367,7 +371,8 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
       pinch = pinchGeometry()
       return
     }
-    drag = { ...p, startX: p.x, startY: p.y, node: hit(p), moved: false }
+    const section = hitHeading(p)
+    drag = { ...p, startX: p.x, startY: p.y, section, node: section ? null : hit(p), moved: false }
     canvas.classList.add('drag')
   })
   on('pointermove', event => {
@@ -391,11 +396,12 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
       }
       drag.x = p.x; drag.y = p.y
     } else if (event.pointerType === 'mouse') {
-      hover = hit(p)
+      const section = hitHeading(p)
+      hover = section?.node ?? hit(p)
       canvas.style.cursor = hover ? 'pointer' : ''
       tooltip.hidden = !hover
       if (hover) {
-        tooltip.textContent = hover.title
+        tooltip.textContent = section?.heading.title ?? hover.title
         tooltip.style.left = `${clamp(p.x + 12, 5, width - tooltip.offsetWidth - 5)}px`
         tooltip.style.top = `${clamp(p.y + 15, 5, height - tooltip.offsetHeight - 5)}px`
       }
@@ -406,10 +412,11 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
     fingers.delete(event.pointerId)
     pinch = null
     if (drag?.node) { drag.node.fx = null; drag.node.fy = null }
-    if (event.type === 'pointerup' && drag && !drag.moved && drag.node) {
-      const node = drag.node
-      clearTimeout(clickTimer)
-      clickTimer = setTimeout(() => onSelect(node), 245)
+    if (event.type === 'pointerup' && drag && !drag.moved) {
+      const { section, node } = drag
+      if (section || node) clearTimeout(clickTimer)
+      if (section) onSelect(section.node, section.heading)
+      else if (node) clickTimer = setTimeout(() => onSelect(node), 245)
     }
     drag = null
     canvas.classList.remove('drag')
@@ -418,7 +425,9 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
   on('pointercancel', release)
   on('pointerleave', () => { hover = null; tooltip.hidden = true })
   on('dblclick', event => {
-    const node = hit(position(event))
+    const p = position(event)
+    if (hitHeading(p)) return
+    const node = hit(p)
     if (node) { clearTimeout(clickTimer); onFocus(node) }
   })
   on('wheel', event => {
@@ -427,8 +436,14 @@ export function createCanvas(canvas, tooltip, onSelect, onFocus, { preserveResiz
     zoomAt(p.x, p.y, Math.exp(clamp(-event.deltaY, -140, 140) * .002), true)
   }, { passive: false })
 
+  function zoomSelection(scale) {
+    const p = active?.headings.length ? point(active) : null
+    const visible = p && p.x >= 0 && p.x <= width && p.y >= 0 && p.y <= height
+    zoomAt(visible ? p.x : width / 2, visible ? p.y : height / 2, scale, true)
+  }
+
   return {
-    setGraph, setScope, center, fit, zoom: scale => zoomAt(width / 2, height / 2, scale, true),
+    setGraph, setScope, center, fit, zoom: zoomSelection,
     select: node => { active = node },
     highlight: ids => { matches = ids },
     edgeType: (type, enabled) => { visibleTypes[type] = enabled },

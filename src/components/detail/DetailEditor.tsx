@@ -11,6 +11,7 @@ export type { DetailEditorProps, DetailMode } from './types'
 export function DetailEditor({
   nodeId,
   markdown,
+  headingTarget,
   onChange,
   template,
 }: DetailEditorProps) {
@@ -20,6 +21,7 @@ export function DetailEditor({
     useDetailVditor({
       nodeId,
       markdown,
+      headingTarget,
       onChange,
       template: tpl,
       mode,

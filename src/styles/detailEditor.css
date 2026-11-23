@@ -263,6 +263,10 @@
 }
 
 /* 详情编辑器：默认隐藏 Vditor 的 H1/H2… 角标，悬停标题时再显示 */
+.detail-vditor .vditor-ir .vditor-reset > :is(h2, h3) {
+  scroll-margin-top: 12px;
+}
+
 .detail-editor .vditor-ir .vditor-reset > h1:before,
 .detail-editor .vditor-ir .vditor-reset > h2:before,
 .detail-editor .vditor-ir .vditor-reset > h3:before,

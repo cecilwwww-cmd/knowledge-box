@@ -1,5 +1,20 @@
+import type { GraphHeading } from '../../../prototypes/knowledge-graph/model.js'
 import type { DetailTemplateId } from '../../db/types'
 import { DETAIL_TPL_IDS } from './types'
+
+export function jumpToHeading(root: HTMLElement, { level, index }: GraphHeading) {
+  const headings = root.querySelectorAll<HTMLElement>(`.vditor-ir .vditor-reset > h${level}`)
+  const heading = headings[index]
+  if (!heading) return false
+  heading.scrollIntoView({ block: 'start', inline: 'nearest' })
+  heading.getAnimations().find(animation => animation.id === 'kb-heading-jump')?.cancel()
+  const highlight = heading.animate(
+    [{ backgroundColor: 'rgba(103, 168, 139, .28)' }, { backgroundColor: 'transparent' }],
+    { duration: 1100, easing: 'ease-out' },
+  )
+  highlight.id = 'kb-heading-jump'
+  return true
+}
 
 export function setIrEditable(root: HTMLElement | null, editable: boolean) {
   const pre = root?.querySelector(

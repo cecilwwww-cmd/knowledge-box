@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { db } from '../db/database'
 import '../../prototypes/knowledge-graph/vendor/d3-layout.js'
 import { createCanvas } from '../../prototypes/knowledge-graph/canvas.js'
-import { readGraph, type RelationGraph } from '../../prototypes/knowledge-graph/model.js'
+import { readGraph, type GraphHeading, type RelationGraph } from '../../prototypes/knowledge-graph/model.js'
 
 interface Props {
   nodeId: string
-  onSelectNode: (id: string) => void
+  onSelectNode: (id: string, heading?: GraphHeading) => void
 }
 
 export function MindmapRelationshipGraph({ nodeId, onSelectNode }: Props) {
@@ -31,9 +31,9 @@ export function MindmapRelationshipGraph({ nodeId, onSelectNode }: Props) {
 
   useEffect(() => {
     if (!canvas.current || !tooltip.current) return
-    const view = createCanvas(canvas.current, tooltip.current, (node) => {
+    const view = createCanvas(canvas.current, tooltip.current, (node, heading) => {
       setSelectedId(node.id)
-      selectRef.current(node.id)
+      selectRef.current(node.id, heading)
     }, (node) => {
       setSelectedId(node.id)
       setFocused(true)

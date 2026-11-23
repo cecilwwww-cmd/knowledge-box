@@ -1,4 +1,4 @@
-import type { RelationGraph, RelationNode } from './model.js'
+import type { GraphHeading, RelationGraph, RelationNode } from './model.js'
 
 interface CanvasView {
   setGraph(graph: RelationGraph, keepView?: boolean): void
@@ -15,7 +15,7 @@ interface CanvasView {
 export function createCanvas(
   canvas: HTMLCanvasElement,
   tooltip: HTMLElement,
-  onSelect: (node: RelationNode) => void,
+  onSelect: (node: RelationNode, heading?: GraphHeading) => void,
   onFocus: (node: RelationNode) => void,
   options?: { preserveResize?: boolean },
 ): CanvasView

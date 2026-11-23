@@ -1,3 +1,9 @@
+export interface GraphHeading {
+  level: 2 | 3
+  index: number
+  title: string
+}
+
 export interface RelationNode {
   id: string
   title: string

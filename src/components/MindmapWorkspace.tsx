@@ -1,5 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import type { GraphHeading } from '../../prototypes/knowledge-graph/model.js'
 import { db } from '../db/database'
 import type { DetailTemplateId, SourceItem } from '../db/types'
 import { DetailEditor } from './detail'
@@ -47,6 +48,7 @@ export function MindmapWorkspace({
   const [graphPercent, setGraphPercent] = useState(50)
   /** 右侧详情：默认当前节点；点带导航的导图分支后切到对应子节点 */
   const [viewNodeId, setViewNodeId] = useState(nodeId)
+  const [headingTarget, setHeadingTarget] = useState<(GraphHeading & { nodeId: string }) | undefined>()
   /** 进入页 / 切换详情时播一次进入动效 */
   const [enterTick, setEnterTick] = useState(0)
   /** 是否显示左右分栏；可取消为仅导图 */
@@ -54,6 +56,7 @@ export function MindmapWorkspace({
 
   useEffect(() => {
     setViewNodeId(nodeId)
+    setHeadingTarget(undefined)
     setOpenId(null)
     setEnterTick((t) => t + 1)
     setSplitOpen(false)
@@ -91,8 +94,9 @@ export function MindmapWorkspace({
     ? viewDetail?.markdown ?? '（该节点暂无详细内容）'
     : markdown
 
-  const openSplitTo = (nextId: string) => {
+  const openSplitTo = (nextId: string, heading?: GraphHeading) => {
     setSplitOpen(true)
+    setHeadingTarget(heading ? { ...heading, nodeId: nextId } : undefined)
     setViewNodeId((prev) => {
       if (prev !== nextId) setEnterTick((t) => t + 1)
       return nextId
@@ -221,9 +225,9 @@ export function MindmapWorkspace({
               <header className="detail-pane-head"><strong>{view === 'graph' ? '关系图谱' : '思维导图'}</strong></header>
             )}
             {view === 'graph' ? (
-              <MindmapRelationshipGraph key={nodeId} nodeId={nodeId} onSelectNode={(id) => {
+              <MindmapRelationshipGraph key={nodeId} nodeId={nodeId} onSelectNode={(id, heading) => {
                 setOpenId(null)
-                openSplitTo(id)
+                openSplitTo(id, heading)
               }} />
             ) : (
               <MindmapEditor key={nodeId} data={data} onChange={onChange} onSelectNode={handleSelect} />
@@ -247,6 +251,7 @@ export function MindmapWorkspace({
                       key={viewNodeId}
                       nodeId={viewNodeId}
                       markdown={paneMarkdown}
+                      headingTarget={headingTarget?.nodeId === viewNodeId ? headingTarget : undefined}
                       template={detailTemplate}
                       onChange={(md) => onSaveDetail(viewNodeId, md)}
                     />

@@ -10,17 +10,18 @@ import {
 import type { DetailTemplateId } from '../../db/types'
 import { filesFromClipboard } from '../../lib/clipboardFiles'
 import { normalizeMathMarkdown } from '../../lib/normalizeMathMarkdown'
-import type { DetailMode } from './types'
+import type { DetailEditorProps, DetailMode } from './types'
 import {
   VDITOR_PLACEHOLDER,
   VDITOR_PREVIEW,
   VDITOR_TOOLBAR,
 } from './vditorConfig'
-import { applyRootChrome, exitFullscreen, showSourceReferences } from './vditorDom'
+import { applyRootChrome, exitFullscreen, showSourceReferences, jumpToHeading } from './vditorDom'
 
 type Options = {
   nodeId: string
   markdown: string
+  headingTarget?: DetailEditorProps['headingTarget']
   onChange: (markdown: string) => void
   template: DetailTemplateId
   mode: DetailMode
@@ -33,6 +34,7 @@ type Options = {
 export function useDetailVditor({
   nodeId,
   markdown,
+  headingTarget,
   onChange,
   template,
   mode,
@@ -44,11 +46,14 @@ export function useDetailVditor({
   const markdownRef = useRef(markdown)
   const modeRef = useRef(mode)
   const templateRef = useRef(template)
+  const headingTargetRef = useRef(headingTarget)
+  const lastHeadingJump = useRef<typeof headingTarget>(undefined)
 
   onChangeRef.current = onChange
   markdownRef.current = markdown
   modeRef.current = mode
   templateRef.current = template
+  headingTargetRef.current = headingTarget
 
   const [toolbarControls, setToolbarControls] = useState<HTMLElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -61,6 +66,16 @@ export function useDetailVditor({
   }
   const syncReferences = (root: HTMLElement | null) => {
     showSourceReferences(root, templateRef.current === 'default' && modeRef.current === 'read')
+  }
+  const scheduleHeadingJump = (root: HTMLElement | null) => {
+    const target = headingTargetRef.current
+    if (!root || !target || target === lastHeadingJump.current) return
+    requestAnimationFrame(() => {
+      if (root === vditorElRef.current && target === headingTargetRef.current &&
+          target !== lastHeadingJump.current && jumpToHeading(root, target)) {
+        lastHeadingJump.current = target
+      }
+    })
   }
 
   useEffect(() => {
@@ -128,6 +143,7 @@ export function useDetailVditor({
         const next = normalizeMathMarkdown(current)
         if (editor.getValue() !== next) editor.setValue(next, true)
         syncReferences(root)
+        scheduleHeadingJump(root)
         if (next !== current) onChangeRef.current(next)
       },
       input: (value) => {
@@ -228,10 +244,11 @@ export function useDetailVditor({
       if (modeRef.current === 'read') showSourceReferences(vditorElRef.current, false)
       if (editor.getValue() !== next) editor.setValue(next, true)
       if (modeRef.current === 'read') syncReferences(vditorElRef.current)
+      scheduleHeadingJump(vditorElRef.current)
     } catch {
       // ignore
     }
-  }, [markdown])
+  }, [markdown, headingTarget])
 
   useEffect(() => {
     syncChrome(vditorElRef.current)

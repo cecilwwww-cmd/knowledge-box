@@ -1,5 +1,38 @@
 const palette = ['#49715d', '#526b76', '#765e4f', '#6f647a', '#577558', '#7d606c', '#4c6f72']
 
+function markdownHeadings(markdown) {
+  const groups = [], indexes = { 2: 0, 3: 0 }
+  let fence, group, previous = ''
+  for (const line of markdown.split(/\r?\n/)) {
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
+    if (marker) {
+      if (!fence) fence = marker[1]
+      else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = undefined
+      previous = ''
+      continue
+    }
+    if (fence) continue
+    const heading = line.match(/^ {0,3}(#{1,6})(?:[ \t]+(.*))?$/)
+    const setext = previous && line.match(/^ {0,3}(=+|-+)[ \t]*$/)
+    const level = heading?.[1].length ?? (setext ? setext[1][0] === '=' ? 1 : 2 : 0)
+    if (level === 1) group = undefined
+    if (level === 2 || level === 3) {
+      const index = indexes[level]++
+      const source = heading ? (heading[2] ?? '').replace(/(?:^|[ \t]+)#+[ \t]*$/, '') : previous
+      const title = source.replace(/!?\[([^\]]+)\]\([^)]*\)/g, '$1')
+        .replace(/(`+|\*\*|__|~~)/g, '').trim()
+      if (title) {
+        const item = { level, index, title, children: [] }
+        if (level === 2) { groups.push(item); group = item }
+        else if (group) group.children.push(item)
+        else groups.push(item)
+      }
+    }
+    previous = level || /^\s*(?:[>|]|[-+*]\s|\d+\.\s|<)/.test(line) ? '' : line.trim()
+  }
+  return groups
+}
+
 export function readGraph(backup) {
   if (!backup || !Array.isArray(backup.nodes)) throw new Error('请选择由知识箱导出的 JSON 备份。')
   const nodes = new Map()
@@ -9,7 +42,7 @@ export function readGraph(backup) {
     nodes.set(row.id, {
       id: row.id, title: row.title || '未命名', parentId: row.parentId,
       sort: Number.isFinite(row.sort) ? row.sort : 0,
-      children: [], links: new Map(), sources: [],
+      children: [], links: new Map(), sources: [], headings: [],
     })
   }
   if (!nodes.size) throw new Error('这个备份还没有知识节点。')
@@ -71,7 +104,10 @@ export function readGraph(backup) {
   }
   for (const record of Array.isArray(backup.details) ? backup.details : []) {
     const node = nodes.get(record?.nodeId)
-    if (node && typeof record.markdown === 'string') node.markdown = record.markdown
+    if (node && typeof record.markdown === 'string') {
+      node.markdown = record.markdown
+      node.headings = markdownHeadings(record.markdown)
+    }
   }
   for (const record of Array.isArray(backup.sources) ? backup.sources : []) {
     const node = nodes.get(record?.nodeId)
